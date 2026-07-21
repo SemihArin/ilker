@@ -42,6 +42,9 @@ header{display:flex; align-items:center; gap:10px; padding:12px 16px 8px; backgr
 .balon.ilker .kimAd{font-family:var(--baslik); letter-spacing:2px; font-size:12px; color:var(--mor)}
 .kaynak{font-family:var(--mono); font-size:9px; color:var(--soluk); display:block; margin-top:5px}
 .kaynak .h{color:var(--nane)}
+.geri{display:flex; gap:6px; margin-top:7px}
+.geri button{background:none; border:1px solid var(--cizgi); color:var(--soluk); border-radius:10px; padding:2px 10px; font-size:12px; cursor:pointer; line-height:1.4}
+.geri button:disabled{opacity:.45}
 .meta{align-self:flex-end; font-family:var(--mono); font-size:10px; color:var(--soluk); padding:0 4px; letter-spacing:.3px}
 .meta.sol{align-self:flex-start}
 .meta.hata{color:var(--kirmizi)}
@@ -231,14 +234,15 @@ const FIREBASE_CONFIG = {
   measurementId: "G-DRKQTNSVVB"
 };
 const ADMIN_UID = "";   // paneldeki UID'ini buraya yapıştır
-const MAXCUMLE = 3000;  // katılımda havuzdan çekilecek cümle penceresi
+const MAXCUMLE = 8000;  // katılımda havuzdan çekilecek cümle penceresi
 const BEKLEME = 2000;   // iki mesaj arası en az süre (ms)
 const KUFUR = ['amk','aq','sik','yarrak','orospu','pic','piç','göt','amcık','amcik','pezevenk','kahpe','ibne','yavşak','yavsak','sürtük'];
 
 /* ====== BEYİN AYARLARI ====== */
-const ANAHTAR = 'ilker-beyin-v5';
+const ANAHTAR = 'ilker-beyin-v8';
 const ODAKAYIT = 'ilker-odalarim';
-const D = 28, CTX = 3, LR = 0.05, NEG = 5, TUR = 3, TEKRAR = 2, MAXURET = 30, TOPK = 14;
+const D = 40, CTX = 3, LR = 0.05, NEG = 5, TUR = 3, TEKRAR = 2, MAXURET = 30, TOPK = 14;
+const PEN = 2, SGNEG = 4, SGLR = 0.04;   // skip-gram: pencere, negatif, hız
 const AGIRLIK = [0.2, 0.3, 0.5];
 const NOKTALAMA = new Set(['.', ',', '!', '?', ';', ':']);
 /* Türkçe kaba gövdeleme — uzun ekten kısaya soy, kök en az 3 harf kalsın */
@@ -259,9 +263,49 @@ function kok(w){
   }
   return s;
 }
-const ESIK = 0.72;       // hafızadan cevap için benzerlik eşiği
-const MAXHAFIZA = 2500;  // saklanan (mesaj -> cevap) çifti
+const ESIK = 0.45;       // hafızadan cevap eşiği (merkezli metrik ölçeğinde)
+const MAXHAFIZA = 6000;  // saklanan (mesaj -> cevap) çifti
 
+
+
+/* ====== SKIP-GRAM — kelime anlamı doğrudan komşuluktan ====== */
+function altOrnekAtla(gid){
+  const t = Math.max(0.005, 50 / Math.max(1, B.toplam));   // eşik derlemle küçülür
+  const f = B.kfrek[gid] / Math.max(1, B.toplam);
+  if (f <= t) return false;
+  return Math.random() < 1 - Math.sqrt(t / f);
+}
+function sgAdim(merkez, baglam, y){
+  const a = B.kemb[merkez], b = B.kctx[baglam];
+  let s = 0;
+  for (let d = 0; d < D; d++) s += a[d] * b[d];
+  const p = 1 / (1 + Math.exp(-s));
+  const g = (p - y) * SGLR;
+  for (let d = 0; d < D; d++){
+    const ad = a[d];
+    a[d] -= g * b[d];
+    b[d] -= g * ad;
+  }
+  return y ? -Math.log(p + 1e-9) : -Math.log(1 - p + 1e-9);
+}
+function skipgramOgren(ids){
+  const g = [];
+  for (let i = 0; i < ids.length; i++) if (icerikId(ids[i])) g.push(B.govde[ids[i]]);
+  let tk = 0, say = 0;
+  for (let i = 0; i < g.length; i++){
+    if (altOrnekAtla(g[i])) continue;
+    for (let j = Math.max(0, i - PEN); j <= Math.min(g.length - 1, i + PEN); j++){
+      if (j === i || g[j] === g[i]) continue;
+      tk += sgAdim(g[i], g[j], 1); say++;
+      for (let k = 0; k < SGNEG; k++){
+        const nId = B.govde[negatifSec(-1)];
+        if (nId === g[i] || nId === g[j]) continue;
+        tk += sgAdim(g[i], nId, 0); say++;
+      }
+    }
+  }
+  return { tk: tk, say: say };
+}
 
 /* ====== KALİTE KAPISI — bilgi kirliliği süzgeci ====== */
 const OGRENSAYAC = new Map();   // normalize cümle -> kaç kez öğrenildi
@@ -313,7 +357,7 @@ function dot(a, b){
 function bosBeyin(){
   return {
     kelimeler: [], frek: [], sapma: [], toplam: 0,
-    kokler: [], kemb: [], kfrek: [], govde: [],
+    kokler: [], kemb: [], kctx: [], kfrek: [], govde: [],
     W1: rastgele(D * D, 0.25), b1: new Float32Array(D),
     W2: rastgele(D * D, 0.25), b2: new Float32Array(D),
     va: rastgele(D, 0.25), bpos: new Float32Array(CTX),
@@ -326,6 +370,7 @@ function yeniBeyin(){
   INDEKS = new Map();
   KINDEKS = new Map();
   HAFIZA = [];
+  TORBA = []; torbaBoy = 0;
   SBAS = kelimeId('<s>');
   SSON = kelimeId('</s>');
 }
@@ -349,6 +394,7 @@ function kokId(k){
     B.kokler.push(k);
     B.kfrek.push(0);
     B.kemb.push(rastgele(D, 0.3));
+    B.kctx.push(rastgele(D, 0.3));
   }
   return id;
 }
@@ -419,10 +465,23 @@ function ileri(ctx){
   }
   return { x: x, h: h, h1: h1, t2: t2, alfa: alfa, E: E, ctx: ctx };
 }
+let TORBA = [], torbaBoy = 0;   // frekans^0.75 örnekleme torbası
+function torbaKur(){
+  TORBA = [];
+  for (let i = 2; i < B.kelimeler.length; i++){
+    const c = Math.max(1, Math.round(Math.pow(B.frek[i] || 1, 0.75)));
+    for (let k = 0; k < Math.min(c, 40); k++) TORBA.push(i);
+    if (TORBA.length > 12000) break;
+  }
+  torbaBoy = B.kelimeler.length;
+}
 function negatifSec(hedef){
   const n = B.kelimeler.length;
-  let id = 2 + Math.floor(Math.random() * (n - 2));
-  if (id === hedef) id = 2 + ((id - 1) % (n - 2));
+  if (!TORBA.length || n > torbaBoy * 1.2) torbaKur();
+  if (!TORBA.length) return 2 + Math.floor(Math.random() * Math.max(1, n - 2));
+  let id = TORBA[Math.floor(Math.random() * TORBA.length)];
+  if (id === hedef) id = TORBA[Math.floor(Math.random() * TORBA.length)];
+  if (id === hedef) id = 2 + ((id + 1) % Math.max(1, n - 2));
   return id;
 }
 function egit(ctx, hedef){
@@ -566,6 +625,7 @@ function ogren(metin, hizli){
   ngramOgren(ids);
   const ciftler = [];
   for (let i = 1; i < ids.length; i++) ciftler.push([ids.slice(Math.max(0, i - CTX), i), ids[i]]);
+  const sg = skipgramOgren(ids);
   const tur = hizli ? 1 : TUR;
   const tekrar = hizli ? 0 : TEKRAR;
   let tk = 0, say = 0;
@@ -575,8 +635,9 @@ function ogren(metin, hizli){
     const es = B.tampon[Math.floor(Math.random() * B.tampon.length)];
     for (let i = 1; i < es.length; i++){ tk += egit(es.slice(Math.max(0, i - CTX), i), es[i]); say++; }
   }
+  tk += sg.tk; say += sg.say;
   B.tampon.push(ids);
-  if (B.tampon.length > 200) B.tampon.shift();
+  if (B.tampon.length > 400) B.tampon.shift();
   B.adim += say;
   const ort = say ? tk / say : 0;
   B.kayipEMA = B.kayipEMA ? 0.9 * B.kayipEMA + 0.1 * ort : ort;
@@ -586,16 +647,33 @@ function ogren(metin, hizli){
 }
 
 /* ====== CÜMLE VEKTÖRÜ + HAFIZA (mesaj -> cevap) ====== */
+let ORTVEK = null, ortAdim = -1;
+function ortakYon(){
+  if (ORTVEK && ortAdim === B.adim) return ORTVEK;
+  const v = new Float32Array(D);
+  let say = 0;
+  for (let i = 2; i < B.kokler.length; i++){
+    if (NOKTALAMA.has(B.kokler[i])) continue;
+    const e = B.kemb[i];
+    for (let d = 0; d < D; d++) v[d] += e[d];
+    say++;
+  }
+  if (say) for (let d = 0; d < D; d++) v[d] /= say;
+  ORTVEK = v; ortAdim = B.adim;
+  return v;
+}
 function cumleVektor(ids){
   const v = new Float32Array(D);
+  const ort = ortakYon();
   let agir = 0;
   for (let i = 0; i < ids.length; i++){
     const id = ids[i];
     if (!icerikId(id)) continue;
     const g = B.govde[id];
+    if (!B.kfrek[g]) continue;        // hiç görülmemiş kök vektörü zehirlemesin
     const w = 1 / (1 + B.kfrek[g]);   // nadir kök ağır basar
     const e = B.kemb[g];
-    for (let d = 0; d < D; d++) v[d] += w * e[d];
+    for (let d = 0; d < D; d++) v[d] += w * (e[d] - ort[d]);   // ortak yönü sök
     agir += w;
   }
   if (!agir) return null;
@@ -604,11 +682,58 @@ function cumleVektor(ids){
   for (let d = 0; d < D; d++) v[d] /= nrm;
   return v;
 }
-function hafizaEkle(onMetin, cevap){
+const OGRET = [
+  'bunu henüz bilmiyorum — bana bu konuda birkaç cümle yazar mısın?',
+  'bu konuda kafamda bağlantı yok; biraz anlatırsan öğrenirim',
+  'hmm, bunu daha öğrenmedim. örnek cümlelerle besle beni'
+];
+function soruMu(t){
+  const n = ' ' + t.toLocaleLowerCase('tr') + ' ';
+  return t.indexOf('?') >= 0 || /\s(ne|neden|niye|nasıl|kim|nerede|nereye|kaç|hangi|mi|mı|mu|mü)\s/.test(n);
+}
+function doluluk(t){
+  return t.toLocaleLowerCase('tr').split(/[^a-zçğıöşü]+/).filter(function(w){ return w.length > 2; }).length;
+}
+function hafizaEkle(onMetin, cevap, puan, o2){
   const ids = parcala(onMetin).map(kelimeId).filter(icerikId);
   if (!ids.length) return;
-  HAFIZA.push({ ids: ids, cevap: cevap });
+  const ids2 = (typeof o2 === 'string' && o2) ? parcala(o2).map(kelimeId).filter(icerikId) : null;
+  HAFIZA.push({ ids: ids, ids2: (ids2 && ids2.length) ? ids2 : null, cevap: cevap, puan: puan || 0, soru: soruMu(onMetin) });
   if (HAFIZA.length > MAXHAFIZA) HAFIZA.shift();
+}
+function bilesikVektor(ids, ids2){
+  const v1 = cumleVektor(ids);
+  if (!v1) return null;
+  if (!ids2 || !ids2.length) return v1;
+  const v2 = cumleVektor(ids2);
+  if (!v2) return v1;
+  const v = new Float32Array(D);
+  for (let d = 0; d < D; d++) v[d] = v1[d] + 0.5 * v2[d];   // bağlam: eşitliği bozacak kadar güçlü
+  const n = Math.sqrt(dot(v, v)) || 1;
+  for (let d = 0; d < D; d++) v[d] /= n;
+  return v;
+}
+function geriUygula(soruM, cevap, g){
+  if (!cevap) return;
+  if (g > 0){   // onaylanan cevap artık meşru eğitim verisi
+    if (ogrenmeyeDeger(cevap)) ogren(cevap, true);
+    if (soruM && ogrenmeyeDeger(soruM)) ogren(soruM, true);
+  }
+  const ids = parcala(soruM).map(kelimeId).filter(icerikId);
+  const qv = ids.length ? cumleVektor(ids) : null;
+  let bulundu = false;
+  for (let i = 0; i < HAFIZA.length; i++){
+    const cift = HAFIZA[i];
+    if (cift.cevap !== cevap) continue;
+    let benzer = !qv;
+    if (qv){ const pv = cumleVektor(cift.ids); benzer = pv && dot(qv, pv) > 0.8; }
+    if (benzer){
+      cift.puan = Math.max(-3, Math.min(5, (cift.puan || 0) + g));
+      bulundu = true;
+    }
+  }
+  if (!bulundu) hafizaEkle(soruM, cevap, g);
+  statGuncelle(); kaydet();
 }
 function hafizaAra(qv){
   let enIyi = null, enSim = 0;
@@ -620,16 +745,58 @@ function hafizaAra(qv){
   }
   return { cift: enIyi, sim: enSim };
 }
-function ilkerCevabi(metin){
+function ilkerCevabi(metin, once){
   const ids = parcala(metin).map(kelimeId).filter(icerikId);
-  const qv = ids.length ? cumleVektor(ids) : null;
-  if (qv && HAFIZA.length >= 5){
-    const b = hafizaAra(qv);
-    if (b.cift && b.sim >= ESIK)
-      return { m: b.cift.cevap, k: 'hafızadan · benzerlik ' + b.sim.toFixed(2) };
+  const onceIds = (typeof once === 'string' && once) ? parcala(once).map(kelimeId).filter(icerikId) : null;
+  const qv = ids.length ? bilesikVektor(ids, onceIds) : null;
+  const bilinen = ids.filter(function(id){ return B.kfrek[B.govde[id]] > 0; }).length;
+  const soru = soruMu(metin);
+  if (qv && bilinen >= 2 && HAFIZA.length >= 5){   // en az iki tanıdık kök
+    const adaylar = [];
+    for (let i = 0; i < HAFIZA.length; i++){
+      const cift = HAFIZA[i];
+      if ((cift.puan || 0) <= -2) continue;                 // topluluk bu cevabı emekli etti
+      const pv = bilesikVektor(cift.ids, cift.ids2);
+      if (!pv) continue;
+      const s = dot(qv, pv);
+      if (s < ESIK - 0.03) continue;
+      const skor = s + 0.09 * Math.max(-2, Math.min(3, cift.puan || 0)) + (cift.soru === soru ? 0.03 : -0.02);
+      if (skor >= ESIK) adaylar.push([cift, s, skor]);
+    }
+    if (adaylar.length){
+      adaylar.sort(function(a, b){ return b[2] - a[2]; });
+      const temizler = adaylar.filter(function(a){ return (a[0].puan || 0) >= 0; });
+      const havuz = temizler.length ? temizler : adaylar;
+      const uc = havuz.slice(0, 3);
+      let tp = 0;
+      for (let i = 0; i < uc.length; i++) tp += Math.exp(22 * uc[i][2]);
+      let r = Math.random() * tp, sec = uc[0];
+      for (let i = 0; i < uc.length; i++){ r -= Math.exp(22 * uc[i][2]); if (r <= 0){ sec = uc[i]; break; } }
+      let k = 'hafızadan · benzerlik ' + sec[1].toFixed(2);
+      if (sec[0].puan) k += ' · puan ' + (sec[0].puan > 0 ? '+' : '') + sec[0].puan;
+      return { m: sec[0].cevap, k: k };
+    }
   }
-  const c = birlestir(uret(ids.length ? ids : [SBAS]));
-  return { m: c || '… (ortak kafada henüz yeterli bağlantı yok)', k: 'üretim' };
+  if (B.kelimeler.length - 2 < 40)
+    return { m: OGRET[Math.floor(Math.random() * OGRET.length)], k: 'öğrenmek istiyor' };
+  const soruKok = {};
+  for (let i = 0; i < ids.length; i++) soruKok[B.govde[ids[i]]] = true;
+  function zayif(t){
+    if (doluluk(t) < 2) return true;
+    const kk = parcala(t).map(kelimeId).filter(icerikId);
+    if (!kk.length) return true;
+    let ayni = 0;
+    for (let i = 0; i < kk.length; i++) if (soruKok[B.govde[kk[i]]]) ayni++;
+    return kk.length <= 3 && ayni / kk.length >= 0.8;   // sorunun yankısı
+  }
+  let c = birlestir(uret(ids.length ? ids : [SBAS]));
+  if (zayif(c)){
+    const c2 = birlestir(uret(ids.length ? ids : [SBAS]));
+    if (!zayif(c2)) c = c2;
+  }
+  if (zayif(c))
+    return { m: OGRET[Math.floor(Math.random() * OGRET.length)], k: 'öğrenmek istiyor' };
+  return { m: c, k: 'üretim' };
 }
 function benzerler(kelime){
   const w = kok(kelime.toLocaleLowerCase('tr').trim());
@@ -668,25 +835,28 @@ function paketle(){
   const duz = new Float32Array(n * D);
   for (let i = 0; i < n; i++) duz.set(B.kemb[i], i * D);
   return {
-    v: 5, d: D, surum: SURUM, imlec: IMLEC,
+    v: 8, d: D, surum: SURUM, imlec: IMLEC,
     kelimeler: B.kelimeler, frek: B.frek, sapma: B.sapma, toplam: B.toplam,
     kokler: B.kokler, kfrek: B.kfrek, govde: B.govde,
-    emb: f32b64(duz), W1: f32b64(B.W1), b1: f32b64(B.b1),
+    emb: f32b64(duz), ctxv: (function(){ const c = new Float32Array(n * D); for (let i = 0; i < n; i++) c.set(B.kctx[i], i * D); return f32b64(c); })(),
+    W1: f32b64(B.W1), b1: f32b64(B.b1),
     W2: f32b64(B.W2), b2: f32b64(B.b2), va: f32b64(B.va), bpos: f32b64(B.bpos),
     bi: Array.from(B.bi).map(function(g){ return [g[0], Array.from(g[1])]; }),
     tri: Array.from(B.tri).map(function(g){ return [g[0], Array.from(g[1])]; }),
     sinaps: B.sinaps, adim: B.adim, kayipEMA: B.kayipEMA,
-    gecmis: B.gecmis, tampon: B.tampon.slice(-80),
-    hafiza: HAFIZA.slice(-1500), sohbet: SOHBET.slice(-60)
+    gecmis: B.gecmis, tampon: B.tampon.slice(-160),
+    hafiza: HAFIZA.slice(-4000), sohbet: SOHBET.slice(-60)
   };
 }
 function ac(p){
-  if (p.d !== D || p.v !== 5) throw new Error('uyumsuz paket');
+  if (p.d !== D || p.v !== 8) throw new Error('uyumsuz paket');
   const y = bosBeyin();
   y.kelimeler = p.kelimeler; y.frek = p.frek; y.sapma = p.sapma; y.toplam = p.toplam || 0;
   y.kokler = p.kokler; y.kfrek = p.kfrek; y.govde = p.govde;
   const duz = b64f32(p.emb);
   for (let i = 0; i < y.kokler.length; i++) y.kemb.push(duz.slice(i * D, (i + 1) * D));
+  const duzc = b64f32(p.ctxv);
+  for (let i = 0; i < y.kokler.length; i++) y.kctx.push(duzc.slice(i * D, (i + 1) * D));
   y.W1 = b64f32(p.W1); y.b1 = b64f32(p.b1);
   y.W2 = b64f32(p.W2); y.b2 = b64f32(p.b2); y.va = b64f32(p.va); y.bpos = b64f32(p.bpos);
   y.bi = new Map(p.bi.map(function(g){ return [g[0], new Map(g[1])]; }));
@@ -696,23 +866,63 @@ function ac(p){
   B = y;
   INDEKS = new Map(B.kelimeler.map(function(w, i){ return [w, i]; }));
   KINDEKS = new Map(B.kokler.map(function(w, i){ return [w, i]; }));
+  TORBA = []; torbaBoy = 0;
   SBAS = INDEKS.get('<s>'); SSON = INDEKS.get('</s>');
-  HAFIZA = p.hafiza || [];
+  HAFIZA = (p.hafiza || []).map(function(c){ return { ids: c.ids, ids2: c.ids2 || null, cevap: c.cevap, puan: c.puan || 0, soru: !!c.soru }; });
   IMLEC = p.imlec || null;
   SOHBET = p.sohbet || [];
 }
+/* IndexedDB: localStorage'ın 5MB tavanını aşan büyük beyin deposu */
+let IDB = null;
+function idbAc(){
+  return new Promise(function(res){
+    if (IDB) return res(IDB);
+    try{
+      const istek = indexedDB.open('ilker-db', 1);
+      istek.onupgradeneeded = function(){ istek.result.createObjectStore('beyin'); };
+      istek.onsuccess = function(){ IDB = istek.result; res(IDB); };
+      istek.onerror = function(){ res(null); };
+    }catch(e){ res(null); }
+  });
+}
+function idbYaz(veri){
+  return idbAc().then(function(vt){
+    if (!vt) throw new Error('idb yok');
+    return new Promise(function(res, rej){
+      const t = vt.transaction('beyin', 'readwrite');
+      t.objectStore('beyin').put(veri, ANAHTAR);
+      t.oncomplete = res;
+      t.onerror = rej;
+    });
+  });
+}
+function idbOku(){
+  return idbAc().then(function(vt){
+    if (!vt) return null;
+    return new Promise(function(res){
+      const istek = vt.transaction('beyin').objectStore('beyin').get(ANAHTAR);
+      istek.onsuccess = function(){ res(istek.result || null); };
+      istek.onerror = function(){ res(null); };
+    });
+  });
+}
 function yukleHam(){
-  try{
-    const h = localStorage.getItem(ANAHTAR);
-    return h ? JSON.parse(h) : null;
-  }catch(e){ return null; }
+  return idbOku().then(function(h){
+    if (h) return JSON.parse(h);
+    try{
+      const l = localStorage.getItem(ANAHTAR);
+      return l ? JSON.parse(l) : null;
+    }catch(e){ return null; }
+  }).catch(function(){ return null; });
 }
 let kayitZ = null;
 function kaydet(){
   clearTimeout(kayitZ);
   kayitZ = setTimeout(function(){
-    try{ localStorage.setItem(ANAHTAR, JSON.stringify(paketle())); }
-    catch(e){}
+    const paket = JSON.stringify(paketle());
+    idbYaz(paket).catch(function(){
+      try{ localStorage.setItem(ANAHTAR, paket); }catch(e){}
+    });
   }, 500);
 }
 
@@ -724,15 +934,29 @@ let MOD = 'ilker';          // 'ilker' | 'oda' | 'liste'
 let AKTIFODA = null;        // açık odanın kodu ('ortak' dahil)
 let ODABILGI = null;        // açık odanın {ad, sahip, ogren}
 let ODALARIM = [];          // [{kod, ad}]
-let mesgul = false, sonGonderim = 0, durumEl = null;
+let mesgul = false, sonGonderim = 0, durumEl = null, birebirOnce = '';
 let birikSay = 0, birikKelime = 0, birikZ = null, sessizZ = null, islenen = 0;
-let sonOdaMesaj = {};       // oda kodu -> {u, m} (çift çıkarımı için)
+let odaAkis = {};           // oda kodu -> son üç konuşma öbeği [{u, m}]
+function akisEkle(kod, u, mtn){
+  const a = odaAkis[kod] || (odaAkis[kod] = []);
+  const son = a[a.length - 1];
+  if (son && son.u === u && u !== 'ilker'){
+    son.m = (son.m + ' ' + mtn).slice(0, 200);   // bölünmüş mesajlar tek öbek
+  } else {
+    a.push({ u: u, m: mtn });
+    if (a.length > 3) a.shift();
+  }
+}
 
 function aktifKutu(){ return MOD === 'ilker' ? kutuIlker : kutuOda; }
 function kaydir(k){ k = k || aktifKutu(); k.scrollTop = k.scrollHeight; }
 function nabizAt(){
   const n = $('nabiz');
   n.classList.remove('atiyor'); void n.offsetWidth; n.classList.add('atiyor');
+}
+function hataMetni(err, varsay){
+  const t = err && err.message ? String(err.message) : varsay;
+  return t.replace(/[<>&]/g, '');
 }
 function metaEkle(kutu, sinif, html){
   const d = document.createElement('div');
@@ -817,6 +1041,7 @@ function ilkerBalon(rol, metin, kaynak, kayitli){
   kutuIlker.appendChild(d);
   if (!kayitli) SOHBET.push({ rol: rol, metin: metin, k: kaynak || null });
   kaydir(kutuIlker);
+  return d;
 }
 function sohbetiCiz(){
   kutuIlker.innerHTML = ''; durumEl = null;
@@ -843,12 +1068,19 @@ function dinle(){
     IMLEC = snap.key;
     const v = snap.val();
     if (!v || typeof v.m !== 'string' || v.m.length > 200) return;
+    if (typeof v.g === 'number'){
+      geriUygula(typeof v.on === 'string' ? temizle(v.on) : '', temizle(v.m), v.g > 0 ? 1 : -1);
+      if (!CANLI) sessizBaslat();
+      return;
+    }
     const m = temizle(v.m);
     if (kufurlu(m) || !kaliteli(m)) return;
     const s = ogrenmeyeDeger(m) ? ogren(m, !CANLI) : { yeni: 0, kayip: B.kayipEMA };
     if (typeof v.on === 'string' && v.on.length <= 200){
       const on = temizle(v.on);
-      if (kaliteli(on) && !kufurlu(on) && ciftDegeri(m)) hafizaEkle(on, m);
+      const o2 = (typeof v.o2 === 'string' && v.o2.length <= 200) ? temizle(v.o2) : '';
+      if (kaliteli(on) && !kufurlu(on) && ciftDegeri(m))
+        hafizaEkle(on, m, 0, (o2 && kaliteli(o2) && !kufurlu(o2)) ? o2 : '');
     }
     if (CANLI){
       if (BEN && v.u === BEN.uid && !v.oda) benimki(m, s);
@@ -862,7 +1094,7 @@ function dinle(){
     kaydet();
   };
   DINQ = q;
-  q.on('child_added', DINCB, function(){ durumYaz('havuza erişilemedi — yetki ya da bağlantı sorunu'); });
+  q.on('child_added', DINCB, function(err){ durumYaz('havuza erişilemedi: ' + hataMetni(err, 'yetki ya da bağlantı sorunu')); });
 }
 function sessizBaslat(){
   clearTimeout(sessizZ);
@@ -883,8 +1115,10 @@ function benimki(metin, s){
   kutuIlker.appendChild(dus); kaydir(kutuIlker);
   setTimeout(function(){
     dus.remove();
-    const c = ilkerCevabi(metin);
-    ilkerBalon('ilker', c.m, c.k);
+    const c = ilkerCevabi(metin, birebirOnce);
+    birebirOnce = metin;
+    const el = ilkerBalon('ilker', c.m, c.k);
+    geriTak(el, metin, c.m);
     kaydet();
     mesgul = false; $('gonderBtn').disabled = false;
   }, 350 + Math.random() * 400);
@@ -949,13 +1183,16 @@ function odaAc(kod, bilgi){
     if (!v || typeof v.m !== 'string') return;
     if (kufurlu(v.m)) return;
     odaBalon(v);
-    sonOdaMesaj[kod] = { u: v.u, m: v.m };
-    if (BEN && v.u === BEN.uid && v.m.toLocaleLowerCase('tr').indexOf('@ilker') >= 0)
-      odaIlkerCevabi(kod, v.m);
+    akisEkle(kod, v.u, v.m);
+    if (BEN && v.u === BEN.uid && v.m.toLocaleLowerCase('tr').indexOf('@ilker') >= 0){
+      const a = odaAkis[kod] || [];
+      const onceki = a.length > 1 ? a[a.length - 2] : null;
+      odaIlkerCevabi(kod, v.m, (onceki && onceki.u !== 'ilker') ? onceki.m : '');
+    }
   };
   ODAQ = db.ref('mesajlar/' + kod).orderByKey().limitToLast(80);
-  ODAQ.on('child_added', ODACB, function(){
-    metaEkle(kutuOda, 'meta hata', 'odaya erişilemedi — üyelik ya da bağlantı sorunu');
+  ODAQ.on('child_added', ODACB, function(err){
+    metaEkle(kutuOda, 'meta hata', 'odaya erişilemedi: ' + hataMetni(err, 'üyelik ya da bağlantı sorunu'));
   });
 }
 function odaBasCiz(){
@@ -1011,19 +1248,20 @@ function odaBalon(v){
   else if (BEN && v.u === BEN.uid) d = balonYap('ben', v.m);
   else d = balonYap('baska', v.m, (v.ad || 'biri'));
   kutuOda.appendChild(d);
+  if (v.u === 'ilker' && typeof v.so === 'string') geriTak(d, v.so, v.m);
   kaydir(kutuOda);
 }
-function odaIlkerCevabi(kod, metin){
+function odaIlkerCevabi(kod, metin, once){
   const dus = balonYap('ilker dusunuyor', '');
   dus.innerHTML = '<span></span><span></span><span></span>';
   kutuOda.appendChild(dus); kaydir(kutuOda);
   setTimeout(function(){
     dus.remove();
     const temiz = metin.replace(/@ilker/gi, ' ').trim() || metin;
-    const c = ilkerCevabi(temiz);
+    const c = ilkerCevabi(temiz, once || '');
     db.ref('mesajlar/' + kod).push({
       u: 'ilker', ad: 'İlker', t: firebase.database.ServerValue.TIMESTAMP,
-      m: c.m, kk: c.k
+      m: c.m, kk: c.k, so: temiz.slice(0, 200)
     });
   }, 400 + Math.random() * 400);
 }
@@ -1120,15 +1358,17 @@ yazim.addEventListener('submit', function(e){
     mesgul = true; $('gonderBtn').disabled = true;
     ilkerBalon('ben', t);
     cumleRef.push({ u: BEN.uid, t: firebase.database.ServerValue.TIMESTAMP, m: t })
-      .catch(function(){
-        metaEkle(kutuIlker, 'meta hata', 'gönderilemedi — bağlantı ya da yetki sorunu');
+      .catch(function(err){
+        metaEkle(kutuIlker, 'meta hata', 'gönderilemedi: ' + hataMetni(err, 'bağlantı ya da yetki sorunu'));
         mesgul = false; $('gonderBtn').disabled = false;
       });
     return;
   }
   // oda modu
   const kod = AKTIFODA;
-  const onceki = sonOdaMesaj[kod];
+  const a = odaAkis[kod] || [];
+  const onceki = a.length ? a[a.length - 1] : null;
+  const onceki2 = a.length > 1 ? a[a.length - 2] : null;
   db.ref('mesajlar/' + kod).push({
     u: BEN.uid, ad: BEN.displayName || 'anonim',
     t: firebase.database.ServerValue.TIMESTAMP, m: t
@@ -1136,13 +1376,40 @@ yazim.addEventListener('submit', function(e){
     if (!ODABILGI || !ODABILGI.ogren) return;   // öğrenmesi kapalı oda havuza gitmez
     if (!kaliteli(t)) return;                    // kalite süzgeci: sohbete gider, havuza gitmez
     const kayit = { u: BEN.uid, t: firebase.database.ServerValue.TIMESTAMP, m: t, oda: kod };
-    if (onceki && onceki.u !== BEN.uid && onceki.u !== 'ilker' && !kufurlu(onceki.m) && ciftDegeri(t))
+    if (onceki && onceki.u !== BEN.uid && onceki.u !== 'ilker' && !kufurlu(onceki.m) && ciftDegeri(t)){
       kayit.on = onceki.m;                       // (mesaj -> cevap) çifti
+      if (onceki2 && onceki2.u !== 'ilker' && !kufurlu(onceki2.m))
+        kayit.o2 = onceki2.m.slice(0, 200);      // bir önceki öbek: konuşma durumu
+    }
     cumleRef.push(kayit);
-  }).catch(function(){
-    metaEkle(kutuOda, 'meta hata', 'gönderilemedi — bağlantı ya da yetki sorunu');
+  }).catch(function(err){
+    metaEkle(kutuOda, 'meta hata', 'gönderilemedi: ' + hataMetni(err, 'bağlantı ya da yetki sorunu'));
   });
 });
+
+/* ====== GERİ BİLDİRİM (ödül/ceza) ====== */
+function geriTak(balon, soruM, cevap){
+  const kutu = document.createElement('div');
+  kutu.className = 'geri';
+  const art = document.createElement('button');
+  art.type = 'button'; art.textContent = '👍';
+  const eks = document.createElement('button');
+  eks.type = 'button'; eks.textContent = '👎';
+  function kapat(sec){ art.disabled = true; eks.disabled = true; sec.style.borderColor = 'var(--mor)'; }
+  art.onclick = function(){ kapat(art); geriGonder(soruM, cevap, 1); };
+  eks.onclick = function(){ kapat(eks); geriGonder(soruM, cevap, -1); };
+  kutu.appendChild(art); kutu.appendChild(eks);
+  balon.appendChild(kutu);
+}
+function geriGonder(soruM, cevap, g){
+  if (!BEN || !CANLI) return;
+  cumleRef.push({
+    u: BEN.uid, t: firebase.database.ServerValue.TIMESTAMP,
+    m: String(cevap).slice(0, 200), on: String(soruM).slice(0, 200), g: g
+  }).catch(function(err){
+    metaEkle(aktifKutu(), 'meta hata', 'geri bildirim gönderilemedi: ' + hataMetni(err, 'yetki sorunu'));
+  });
+}
 
 /* ====== PANEL ====== */
 $('panelAc').onclick = function(){ $('panel').classList.add('acik'); $('ortu').classList.add('acik'); statGuncelle(); };
@@ -1242,9 +1509,9 @@ $('surumBtn').onclick = function(){
 
 /* ====== BAŞLATMA ====== */
 function beyniKur(){
-  const pack = yukleHam();
+  yukleHam().then(function(pack){
   let kuruldu = false;
-  if (pack && pack.surum === SURUM && pack.d === D && pack.v === 5){
+  if (pack && pack.surum === SURUM && pack.d === D && pack.v === 8){
     try{ ac(pack); kuruldu = true; }catch(e){ kuruldu = false; }
   }
   if (!kuruldu){ yeniBeyin(); IMLEC = null; SOHBET = []; }
@@ -1255,6 +1522,7 @@ function beyniKur(){
   const url = new URLSearchParams(location.search);
   const oda = (url.get('oda') || '').toUpperCase();
   if (oda.length === 6) odayaGir(oda);
+  });
 }
 function surumIzle(){
   db.ref('ayarlar/surum').on('value', function(s){
