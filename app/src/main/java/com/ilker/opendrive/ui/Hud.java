@@ -2,12 +2,17 @@ package com.ilker.opendrive.ui;
 
 import com.ilker.opendrive.game.Car;
 import com.ilker.opendrive.game.Controls;
+import com.ilker.opendrive.game.Traffic;
 import com.ilker.opendrive.gl.HudProgram;
 import com.ilker.opendrive.world.Terrain;
 
 /**
- * Touch controls, instruments and minimap. Layout is driven off the screen
- * height so it lands sensibly on anything from a small phone to a tablet.
+ * Touch controls and instruments.
+ *
+ * Two rules drive the layout: nothing sits in the middle of the screen, which
+ * is where the player is actually looking, and every control is a thumb-sized
+ * target in the corner a thumb can reach. Everything is measured in hundredths
+ * of the screen height so it lands the same on a small phone and a tablet.
  */
 public class Hud {
 
@@ -20,27 +25,40 @@ public class Hud {
 
     private static final String[] BTN_LABEL = {"KAM", "ARAC", "ISIK", "EGIM", "SIFIR"};
 
+    // Palette.
+    private static final float[] PANEL = {0.035f, 0.045f, 0.07f, 0.72f};
+    private static final float[] EDGE = {0.30f, 0.46f, 0.56f, 0.55f};
+    private static final float[] ACCENT = {0.36f, 0.84f, 0.98f};
+    private static final float[] TEXT = {0.88f, 0.94f, 0.97f};
+    private static final float[] TEXT_DIM = {0.54f, 0.66f, 0.74f};
+    private static final float[] GAS = {0.32f, 0.90f, 0.56f};
+    private static final float[] BRAKE = {1.00f, 0.38f, 0.36f};
+    private static final float[] HAND = {1.00f, 0.72f, 0.24f};
+
     private int width;
     private int height;
     private float u;
 
-    private float steerLx, steerLy, steerRx, steerRy, steerRad;
-    private float gasX, gasY, gasRad;
-    private float brakeX, brakeY, brakeRad;
-    private float handX, handY, handRad;
-    private float mapX, mapY, mapRad;
-    private float dialX, dialY, dialRad;
-
+    // Steering pads.
+    private float padY, padH, padW, padLeftX, padRightX, steerSplit;
+    // Pedals.
+    private float gasX, gasY, gasR;
+    private float brakeX, brakeY, brakeR;
+    private float handX, handY, handR;
+    // Instruments.
+    private float mapX, mapY, mapR;
+    private float statX, statY, statW, statH;
+    private float dashX, dashY, dashW, dashH;
+    // Buttons.
     private final float[] btnX = new float[BTN_COUNT];
-    private float btnY;
-    private float btnW;
-    private float btnH;
+    private float btnY, btnW, btnH;
 
     private final boolean[] btnDown = new boolean[BTN_COUNT];
     private final boolean[] btnTapped = new boolean[BTN_COUNT];
     private final boolean[] btnNowDown = new boolean[BTN_COUNT];
 
     private boolean leftLit, rightLit, gasLit, brakeLit, handLit;
+    private float steerShown;
 
     private final float[] trafficScratch = new float[64];
 
@@ -49,56 +67,84 @@ public class Hud {
         this.height = height;
         this.u = height / 100f;
 
-        steerRad = 11.5f * u;
-        steerLy = height - 14.5f * u;
-        steerRy = steerLy;
-        steerLx = 15f * u;
-        steerRx = 41f * u;
+        float margin = 3f * u;
 
-        gasRad = 13f * u;
-        gasX = width - 16f * u;
-        gasY = height - 16f * u;
+        // --- steering, bottom left
+        padH = 26f * u;
+        padW = 21f * u;
+        padY = height - margin - padH;
+        padLeftX = margin;
+        padRightX = margin + padW + 2f * u;
+        steerSplit = (padLeftX + padRightX + padW) * 0.5f;
 
-        brakeRad = 10.5f * u;
-        brakeX = width - 43f * u;
-        brakeY = height - 13.5f * u;
+        // --- pedals, bottom right
+        gasR = 14f * u;
+        gasX = width - margin - gasR;
+        gasY = height - margin - gasR;
 
-        handRad = 8f * u;
-        handX = width - 18f * u;
-        handY = height - 46f * u;
+        brakeR = 11f * u;
+        brakeX = gasX - gasR - brakeR - 3f * u;
+        brakeY = height - margin - brakeR - 1f * u;
 
-        mapRad = 13f * u;
-        mapX = mapRad + 3f * u;
-        mapY = mapRad + 3f * u;
+        handR = 8.5f * u;
+        handX = brakeX;
+        handY = brakeY - brakeR - handR - 5f * u;
 
-        // The dial lives in the gap between the steering pair and the brake,
-        // so on a squarer screen it shrinks rather than sliding underneath them.
-        float dialRoom = Math.min(width * 0.5f - (steerRx + steerRad + 2f * u),
-                (brakeX - brakeRad - 2f * u) - width * 0.5f);
-        dialRad = Math.max(11.5f * u, Math.min(19f * u, dialRoom));
-        dialX = width * 0.5f;
-        dialY = height - 21f * u;
+        // --- minimap and stats, top left
+        mapR = 13f * u;
+        mapX = margin + mapR;
+        mapY = margin + mapR;
 
-        btnW = 11.5f * u;
-        btnH = 9f * u;
-        btnY = 3f * u;
-        float gap = 1.4f * u;
-        float total = BTN_COUNT * btnW + (BTN_COUNT - 1) * gap;
-        float startX = width - 3f * u - total;
+        statX = margin;
+        statY = mapY + mapR + 2.5f * u;
+        statW = 52f * u;
+        statH = 19f * u;
+
+        // --- buttons, top right
+        btnW = 15f * u;
+        btnH = 14f * u;
+        btnY = margin;
+        float gap = 1.5f * u;
+        float strip = BTN_COUNT * btnW + (BTN_COUNT - 1) * gap;
+        float startX = width - margin - strip;
         for (int i = 0; i < BTN_COUNT; i++) {
             btnX[i] = startX + i * (btnW + gap);
         }
+
+        // --- speed panel, centred in whatever gap the controls leave
+        dashW = 41f * u;
+        dashH = 18.5f * u;
+        float free0 = padRightX + padW;
+        float free1 = brakeX - brakeR;
+        if (free1 - free0 >= dashW + 5f * u) {
+            // Normal case: centred in the gap the controls leave along the bottom.
+            dashY = height - margin - dashH;
+            dashX = (free0 + free1) * 0.5f - dashW * 0.5f;
+        } else {
+            // Squarer screen: no room along the bottom, so sit above the pads.
+            dashX = margin;
+            dashY = padY - dashH - 1f * u;
+        }
     }
 
-    private static boolean inCircle(float px, float py, float cx, float cy, float r) {
+    // ----------------------------------------------------------------- input
+
+    /** Distance to a circle's centre as a fraction of its radius. */
+    private static float reach(float px, float py, float cx, float cy, float r) {
         float dx = px - cx;
         float dy = py - cy;
-        return dx * dx + dy * dy <= r * r;
+        return (float) Math.sqrt(dx * dx + dy * dy) / Math.max(0.001f, r);
+    }
+
+    private static boolean inRect(float px, float py, float x, float y, float w, float h,
+                                  float grow) {
+        return px >= x - grow && px <= x + w + grow && py >= y - grow && py <= y + h + grow;
     }
 
     /**
-     * Turns the live pointer list into control inputs. Tap-style buttons are
-     * edge triggered; {@link #wasTapped(int)} reports them for this frame.
+     * Turns the live pointer list into control inputs. The hit areas are
+     * deliberately larger than the shapes drawn: thumbs drift while the car is
+     * moving, and losing the throttle mid-corner is worse than an overlap.
      */
     public void processInput(float[] px, float[] py, int count, Controls out,
                              float tiltSteer, boolean tiltEnabled) {
@@ -111,38 +157,49 @@ public class Hud {
 
         java.util.Arrays.fill(btnNowDown, false);
         float steerInput = 0f;
+        float grow = 2.5f * u;
 
-        // Generous hit areas: the drawn circle plus a margin, because thumbs
-        // drift while the car is moving.
-        float grow = 1.35f;
         for (int i = 0; i < count; i++) {
             float x = px[i];
             float y = py[i];
 
-            if (inCircle(x, y, steerLx, steerLy, steerRad * grow)) {
-                steerInput -= 1f;
-                leftLit = true;
+            // One zone split down the middle rather than two grown rectangles:
+            // overlapping hit areas would cancel each other out in the seam.
+            if (x <= padRightX + padW + grow && y >= padY - grow) {
+                if (x < steerSplit) {
+                    steerInput -= 1f;
+                    leftLit = true;
+                } else {
+                    steerInput += 1f;
+                    rightLit = true;
+                }
             }
-            if (inCircle(x, y, steerRx, steerRy, steerRad * grow)) {
-                steerInput += 1f;
-                rightLit = true;
+            // Nearest pedal wins. Growing three circles independently would
+            // make them overlap, and a touch in the seam would fire two at
+            // once — brake and throttle together, which feels broken.
+            int pedal = -1;
+            float best = Float.MAX_VALUE;
+            float dGas = reach(x, y, gasX, gasY, gasR + grow);
+            float dBrake = reach(x, y, brakeX, brakeY, brakeR + grow);
+            float dHand = reach(x, y, handX, handY, handR + grow);
+            if (dGas < best) { best = dGas; pedal = 0; }
+            if (dBrake < best) { best = dBrake; pedal = 1; }
+            if (dHand < best) { best = dHand; pedal = 2; }
+            if (best <= 1f) {
+                if (pedal == 0) {
+                    out.throttle = 1f;
+                    gasLit = true;
+                } else if (pedal == 1) {
+                    out.brake = 1f;
+                    brakeLit = true;
+                } else {
+                    out.handbrake = true;
+                    handLit = true;
+                }
             }
-            if (inCircle(x, y, gasX, gasY, gasRad * grow)) {
-                out.throttle = 1f;
-                gasLit = true;
-            }
-            if (inCircle(x, y, brakeX, brakeY, brakeRad * grow)) {
-                out.brake = 1f;
-                brakeLit = true;
-            }
-            if (inCircle(x, y, handX, handY, handRad * grow)) {
-                out.handbrake = true;
-                handLit = true;
-            }
-            for (int bIdx = 0; bIdx < BTN_COUNT; bIdx++) {
-                if (x >= btnX[bIdx] && x <= btnX[bIdx] + btnW
-                        && y >= btnY && y <= btnY + btnH) {
-                    btnNowDown[bIdx] = true;
+            for (int b = 0; b < BTN_COUNT; b++) {
+                if (inRect(x, y, btnX[b], btnY, btnW, btnH, 0.8f * u)) {
+                    btnNowDown[b] = true;
                 }
             }
         }
@@ -166,154 +223,264 @@ public class Hud {
 
     // ------------------------------------------------------------------ draw
 
-    public void draw(HudProgram g, Car car, com.ilker.opendrive.game.Traffic traffic,
+    public void draw(HudProgram g, Car car, Traffic traffic,
                      boolean lightsOn, boolean tiltEnabled, float timeOfDay, int fps,
                      String message, float messageAlpha) {
+        steerShown += (car.steerAngle / 0.62f - steerShown) * 0.35f;
+
         drawMinimap(g, car, traffic);
-        drawDial(g, car);
-        drawPedals(g);
-        drawButtons(g, lightsOn, tiltEnabled);
         drawStats(g, car, timeOfDay, fps);
-        if (messageAlpha > 0.01f && message != null) {
-            float pixel = Math.max(2f, 0.9f * u);
+        drawButtons(g, lightsOn, tiltEnabled);
+        drawDash(g, car);
+        drawSteering(g);
+        drawPedals(g);
+
+        if (messageAlpha > 0.01f && message != null && !message.isEmpty()) {
+            // Fixed slot below the button strip and clear of the minimap. The
+            // speed panel moves around depending on the screen shape, so
+            // hanging the message off it lands in the instruments on a tablet.
+            float left = mapX + mapR + 2f * u;
+            float right = width - 3f * u;
+            float band = right - left;
+            float glyphs = Math.max(1, message.length() * 6 - 1);
+            float pixel = Math.min(0.58f * u, (band - 6f * u) / glyphs);
             float w = PixelFont.width(message, pixel);
-            g.rect(width * 0.5f - w * 0.5f - 2f * u, 13f * u, w + 4f * u, 7f * u,
-                    0.04f, 0.05f, 0.08f, 0.62f * messageAlpha);
-            PixelFont.drawCentered(g, message, width * 0.5f, 15f * u, pixel,
-                    0.62f, 0.94f, 1f, messageAlpha);
+            float cx = (left + right) * 0.5f;
+            float h = PixelFont.height(pixel) + 3.2f * u;
+            float by = btnY + btnH + 2.2f * u;
+            g.roundedRect(cx - w * 0.5f - 2.6f * u, by, w + 5.2f * u, h, 1.6f * u,
+                    PANEL[0], PANEL[1], PANEL[2], 0.80f * messageAlpha);
+            PixelFont.drawCentered(g, message, cx, by + 1.6f * u, pixel,
+                    ACCENT[0], ACCENT[1], ACCENT[2], messageAlpha);
         }
     }
 
+    private void panel(HudProgram g, float x, float y, float w, float h, float radius,
+                       float alpha) {
+        g.roundedRect(x, y, w, h, radius, PANEL[0], PANEL[1], PANEL[2], alpha);
+        g.roundedRectOutline(x, y, w, h, radius, 0.3f * u,
+                EDGE[0], EDGE[1], EDGE[2], EDGE[3]);
+    }
+
+    // -------------------------------------------------------------- steering
+
+    private void drawSteering(HudProgram g) {
+        steerPad(g, padLeftX, true, leftLit);
+        steerPad(g, padRightX, false, rightLit);
+
+        // A hairline under the pads showing where the wheels actually are.
+        float cx = (padLeftX + padRightX + padW) * 0.5f;
+        float barW = padW * 2f + 2f * u;
+        float barY = padY - 2.6f * u;
+        g.roundedRect(cx - barW * 0.5f, barY, barW, 1.2f * u, 0.6f * u,
+                PANEL[0], PANEL[1], PANEL[2], 0.6f);
+        float knob = clamp(steerShown, -1f, 1f) * (barW * 0.5f - 2f * u);
+        g.roundedRect(cx + knob - 2f * u, barY - 0.5f * u, 4f * u, 2.2f * u, 1.1f * u,
+                ACCENT[0], ACCENT[1], ACCENT[2], 0.9f);
+    }
+
+    private void steerPad(HudProgram g, float x, boolean left, boolean lit) {
+        float radius = 3.5f * u;
+        g.roundedRect(x, padY, padW, padH, radius,
+                PANEL[0], PANEL[1], PANEL[2], lit ? 0.80f : 0.52f);
+        if (lit) {
+            g.roundedRect(x, padY, padW, padH, radius,
+                    ACCENT[0], ACCENT[1], ACCENT[2], 0.26f);
+        }
+        g.roundedRectOutline(x, padY, padW, padH, radius, lit ? 0.5f * u : 0.3f * u,
+                ACCENT[0], ACCENT[1], ACCENT[2], lit ? 0.95f : 0.45f);
+
+        float cx = x + padW * 0.5f;
+        float cy = padY + padH * 0.5f;
+        float s = padW * 0.26f;
+        float dir = left ? -1f : 1f;
+        float a = lit ? 1f : 0.82f;
+        // A chevron pair reads as a direction far better than one triangle.
+        for (int i = 0; i < 2; i++) {
+            float off = (i == 0 ? -0.42f : 0.42f) * s;
+            chevron(g, cx + dir * off, cy, s, dir, a);
+        }
+    }
+
+    private void chevron(HudProgram g, float cx, float cy, float s, float dir, float alpha) {
+        float t = s * 0.34f;
+        // Two thick strokes meeting at the tip.
+        g.line(cx - dir * s * 0.45f, cy - s, cx + dir * s * 0.45f, cy, t,
+                ACCENT[0], ACCENT[1], ACCENT[2], alpha);
+        g.line(cx + dir * s * 0.45f, cy, cx - dir * s * 0.45f, cy + s, t,
+                ACCENT[0], ACCENT[1], ACCENT[2], alpha);
+    }
+
+    // ---------------------------------------------------------------- pedals
+
     private void drawPedals(HudProgram g) {
-        pedal(g, steerLx, steerLy, steerRad, leftLit, 0.35f, 0.72f, 0.95f);
-        arrow(g, steerLx, steerLy, steerRad * 0.45f, true, leftLit);
-        pedal(g, steerRx, steerRy, steerRad, rightLit, 0.35f, 0.72f, 0.95f);
-        arrow(g, steerRx, steerRy, steerRad * 0.45f, false, rightLit);
-
-        pedal(g, gasX, gasY, gasRad, gasLit, 0.34f, 0.92f, 0.52f);
-        PixelFont.drawCentered(g, "GAZ", gasX, gasY - 1.6f * u, 0.85f * u,
-                0.92f, 1f, 0.94f, gasLit ? 1f : 0.82f);
-
-        pedal(g, brakeX, brakeY, brakeRad, brakeLit, 0.95f, 0.36f, 0.34f);
-        PixelFont.drawCentered(g, "FREN", brakeX, brakeY - 1.6f * u, 0.8f * u,
-                1f, 0.92f, 0.92f, brakeLit ? 1f : 0.82f);
-
-        pedal(g, handX, handY, handRad, handLit, 0.98f, 0.72f, 0.20f);
-        PixelFont.drawCentered(g, "EL FR", handX, handY - 1.4f * u, 0.7f * u,
-                1f, 0.96f, 0.86f, handLit ? 1f : 0.82f);
+        pedal(g, gasX, gasY, gasR, gasLit, GAS, "GAZ");
+        pedal(g, brakeX, brakeY, brakeR, brakeLit, BRAKE, "FREN");
+        pedal(g, handX, handY, handR, handLit, HAND, "EL FR");
     }
 
     private void pedal(HudProgram g, float cx, float cy, float r, boolean lit,
-                       float cr, float cg, float cb) {
-        g.circle(cx, cy, r, 28, 0.05f, 0.06f, 0.09f, lit ? 0.62f : 0.38f);
-        g.ring(cx, cy, r - 0.9f * u, r, 30, 0f, (float) (Math.PI * 2),
-                cr, cg, cb, lit ? 0.98f : 0.55f);
+                       float[] col, String label) {
+        g.circle(cx, cy, r, 34, PANEL[0], PANEL[1], PANEL[2], lit ? 0.85f : 0.55f);
         if (lit) {
-            g.circle(cx, cy, r - 1.2f * u, 26, cr, cg, cb, 0.22f);
+            g.circle(cx, cy, r - 0.8f * u, 32, col[0], col[1], col[2], 0.30f);
         }
+        g.ring(cx, cy, r - (lit ? 0.9f : 0.55f) * u, r, 36, 0f, (float) (Math.PI * 2),
+                col[0], col[1], col[2], lit ? 1f : 0.55f);
+        // Size the caption from the circle rather than guessing, so a longer
+        // word never spills outside the button it belongs to.
+        float pixel = Math.min(1.15f * u, (r * 1.45f) / Math.max(1, label.length() * 6 - 1));
+        PixelFont.drawCentered(g, label, cx, cy - PixelFont.height(pixel) * 0.5f, pixel,
+                lit ? 1f : TEXT[0], lit ? 1f : TEXT[1], lit ? 1f : TEXT[2], lit ? 1f : 0.88f);
     }
 
-    private void arrow(HudProgram g, float cx, float cy, float size, boolean left, boolean lit) {
-        float a = lit ? 1f : 0.7f;
-        float dir = left ? -1f : 1f;
-        g.triangle(cx + dir * size, cy,
-                cx - dir * size * 0.45f, cy - size * 0.85f,
-                cx - dir * size * 0.45f, cy + size * 0.85f,
-                0.75f, 0.93f, 1f, a);
-    }
+    // --------------------------------------------------------------- buttons
 
     private void drawButtons(HudProgram g, boolean lightsOn, boolean tiltEnabled) {
         for (int i = 0; i < BTN_COUNT; i++) {
-            boolean active = (i == BTN_LIGHTS && lightsOn) || (i == BTN_TILT && tiltEnabled);
+            boolean on = (i == BTN_LIGHTS && lightsOn) || (i == BTN_TILT && tiltEnabled);
             boolean held = btnDown[i];
-            float alpha = held ? 0.80f : 0.42f;
-            g.rect(btnX[i], btnY, btnW, btnH, 0.05f, 0.06f, 0.09f, alpha);
-            float br = active ? 0.30f : 0.42f;
-            float bg = active ? 0.95f : 0.60f;
-            float bb = active ? 0.72f : 0.78f;
-            border(g, btnX[i], btnY, btnW, btnH, 0.35f * u, br, bg, bb, active ? 0.95f : 0.55f);
-            PixelFont.drawCentered(g, BTN_LABEL[i], btnX[i] + btnW * 0.5f,
-                    btnY + btnH * 0.5f - 1.25f * u, 0.8f * u,
-                    active ? 0.65f : 0.85f, active ? 1f : 0.92f, active ? 0.85f : 0.96f, 0.95f);
+            float radius = 2.6f * u;
+
+            g.roundedRect(btnX[i], btnY, btnW, btnH, radius,
+                    PANEL[0], PANEL[1], PANEL[2], held ? 0.85f : 0.55f);
+            if (on || held) {
+                g.roundedRect(btnX[i], btnY, btnW, btnH, radius,
+                        ACCENT[0], ACCENT[1], ACCENT[2], held ? 0.30f : 0.18f);
+            }
+            g.roundedRectOutline(btnX[i], btnY, btnW, btnH, radius,
+                    (on || held) ? 0.45f * u : 0.28f * u,
+                    ACCENT[0], ACCENT[1], ACCENT[2], (on || held) ? 0.95f : 0.40f);
+
+            float cx = btnX[i] + btnW * 0.5f;
+            float cy = btnY + btnH * 0.40f;
+            float s = btnW * 0.30f;
+            float ia = on ? 1f : 0.85f;
+            float ir = on ? ACCENT[0] : TEXT[0];
+            float ig = on ? ACCENT[1] : TEXT[1];
+            float ib = on ? ACCENT[2] : TEXT[2];
+            switch (i) {
+                case BTN_CAMERA: iconCamera(g, cx, cy, s, ir, ig, ib, ia); break;
+                case BTN_CAR: iconCar(g, cx, cy, s, ir, ig, ib, ia); break;
+                case BTN_LIGHTS: iconLight(g, cx, cy, s, ir, ig, ib, ia); break;
+                case BTN_TILT: iconTilt(g, cx, cy, s, ir, ig, ib, ia); break;
+                default: iconReset(g, cx, cy, s, ir, ig, ib, ia); break;
+            }
+
+            float pixel = 0.5f * u;
+            PixelFont.drawCentered(g, BTN_LABEL[i], cx, btnY + btnH - 4.4f * u, pixel,
+                    on ? ACCENT[0] : TEXT_DIM[0], on ? ACCENT[1] : TEXT_DIM[1],
+                    on ? ACCENT[2] : TEXT_DIM[2], 0.95f);
         }
     }
 
-    private void border(HudProgram g, float x, float y, float w, float h, float t,
-                        float r, float gg, float b, float a) {
-        g.rect(x, y, w, t, r, gg, b, a);
-        g.rect(x, y + h - t, w, t, r, gg, b, a);
-        g.rect(x, y, t, h, r, gg, b, a);
-        g.rect(x + w - t, y, t, h, r, gg, b, a);
+    private void iconCamera(HudProgram g, float cx, float cy, float s,
+                            float r, float gg, float b, float a) {
+        g.roundedRect(cx - s * 0.30f, cy - s * 0.95f, s * 0.6f, s * 0.3f, s * 0.1f, r, gg, b, a);
+        g.roundedRect(cx - s, cy - s * 0.7f, s * 2f, s * 1.5f, s * 0.25f, r, gg, b, a);
+        g.circle(cx, cy, s * 0.46f, 16, PANEL[0], PANEL[1], PANEL[2], 0.95f);
+        g.ring(cx, cy, s * 0.30f, s * 0.46f, 18, 0f, (float) (Math.PI * 2), r, gg, b, a);
     }
 
-    // ------------------------------------------------------------------ dial
+    private void iconCar(HudProgram g, float cx, float cy, float s,
+                         float r, float gg, float b, float a) {
+        g.roundedRect(cx - s, cy - s * 0.12f, s * 2f, s * 0.85f, s * 0.22f, r, gg, b, a);
+        // Cabin: a squat trapezoid sitting on the body.
+        g.triangle(cx - s * 0.62f, cy - s * 0.12f, cx - s * 0.34f, cy - s * 0.78f,
+                cx + s * 0.34f, cy - s * 0.78f, r, gg, b, a);
+        g.triangle(cx - s * 0.62f, cy - s * 0.12f, cx + s * 0.34f, cy - s * 0.78f,
+                cx + s * 0.62f, cy - s * 0.12f, r, gg, b, a);
+        g.circle(cx - s * 0.55f, cy + s * 0.78f, s * 0.28f, 12, r, gg, b, a);
+        g.circle(cx + s * 0.55f, cy + s * 0.78f, s * 0.28f, 12, r, gg, b, a);
+    }
 
-    private void drawDial(HudProgram g, Car car) {
-        float start = (float) Math.toRadians(135.0);
-        float sweep = (float) Math.toRadians(270.0);
-        float inner = dialRad - 2.6f * u;
+    private void iconLight(HudProgram g, float cx, float cy, float s,
+                           float r, float gg, float b, float a) {
+        float half = (float) Math.PI * 0.5f;
+        g.pie(cx - s * 0.25f, cy, s * 0.85f, half, (float) Math.PI, 12, r, gg, b, a);
+        g.rect(cx - s * 0.60f, cy - s * 0.85f, s * 0.35f, s * 1.7f, r, gg, b, a);
+        for (int i = -1; i <= 1; i++) {
+            float y = cy + i * s * 0.55f;
+            g.line(cx + s * 0.45f, y, cx + s * 1.05f, y, s * 0.20f, r, gg, b, a);
+        }
+    }
 
-        g.ring(dialX, dialY, inner - 0.4f * u, dialRad, 48, start, sweep,
-                0.05f, 0.07f, 0.10f, 0.55f);
+    private void iconTilt(HudProgram g, float cx, float cy, float s,
+                          float r, float gg, float b, float a) {
+        g.rotatedRect(cx, cy, s * 1.8f, s * 1.0f, 0.42f, r, gg, b, a);
+        g.rotatedRect(cx, cy, s * 1.3f, s * 0.5f, 0.42f, PANEL[0], PANEL[1], PANEL[2], 0.9f);
+        g.line(cx - s * 1.25f, cy + s * 0.85f, cx + s * 1.25f, cy - s * 0.30f, s * 0.14f,
+                r, gg, b, a * 0.6f);
+    }
 
+    private void iconReset(HudProgram g, float cx, float cy, float s,
+                           float r, float gg, float b, float a) {
+        g.ring(cx, cy, s * 0.52f, s * 0.82f, 20, -2.2f, 4.9f, r, gg, b, a);
+        float tipX = cx + (float) Math.cos(-2.2f) * s * 0.67f;
+        float tipY = cy + (float) Math.sin(-2.2f) * s * 0.67f;
+        g.triangle(tipX - s * 0.45f, tipY - s * 0.10f,
+                tipX + s * 0.18f, tipY - s * 0.48f,
+                tipX + s * 0.22f, tipY + s * 0.28f, r, gg, b, a);
+    }
+
+    // ------------------------------------------------------------- speed dash
+
+    private void drawDash(HudProgram g, Car car) {
+        panel(g, dashX, dashY, dashW, dashH, 2.8f * u, PANEL[3]);
+
+        float pad = 3f * u;
         float max = Math.max(60f, car.spec.topSpeedKmh());
-        float frac = Math.min(1f, car.speedKmh() / max);
-        int segs = Math.max(1, Math.round(48 * frac));
-        if (frac > 0.001f) {
-            float r = 0.30f + 0.68f * frac;
-            float gr = 0.92f - 0.55f * frac;
-            float b = 1f - 0.82f * frac;
-            g.ring(dialX, dialY, inner, dialRad - 0.35f * u, segs, start, sweep * frac,
-                    r, gr, b, 0.95f);
+        float frac = clamp(car.speedKmh() / max, 0f, 1f);
+
+        // Speed bar across the top of the panel: accent until the car is near
+        // its limit, then red, which is easier to read at a glance than a
+        // colour that drifts continuously.
+        float barX = dashX + pad;
+        float barW = dashW - pad * 2f;
+        float barY = dashY + 2.2f * u;
+        float barH = 1.5f * u;
+        g.roundedRect(barX, barY, barW, barH, barH * 0.5f, 0.09f, 0.12f, 0.16f, 0.9f);
+        if (frac > 0.005f) {
+            float hot = clamp((frac - 0.82f) / 0.18f, 0f, 1f);
+            float cr = ACCENT[0] + (1.00f - ACCENT[0]) * hot;
+            float cg = ACCENT[1] + (0.36f - ACCENT[1]) * hot;
+            float cb = ACCENT[2] + (0.28f - ACCENT[2]) * hot;
+            g.roundedRect(barX, barY, Math.max(barH, barW * frac), barH, barH * 0.5f,
+                    cr, cg, cb, 1f);
         }
 
-        // Tick marks every tenth of the scale.
-        for (int i = 0; i <= 10; i++) {
-            float ang = start + sweep * i / 10f;
-            float c = (float) Math.cos(ang);
-            float s = (float) Math.sin(ang);
-            float len = (i % 5 == 0) ? 2.4f * u : 1.4f * u;
-            g.line(dialX + c * (inner - 0.6f * u), dialY + s * (inner - 0.6f * u),
-                    dialX + c * (inner - 0.6f * u - len), dialY + s * (inner - 0.6f * u - len),
-                    (i % 5 == 0) ? 0.55f * u : 0.32f * u,
-                    0.55f, 0.72f, 0.85f, 0.75f);
-        }
+        float digitH = 9f * u;
+        float digitW = 5f * u;
+        float digitsY = dashY + 5.2f * u;
+        float digitsRight = dashX + pad + PixelFont.numberWidth(3, digitW);
+        PixelFont.sevenSegmentNumber(g, Math.round(car.speedKmh()), 3,
+                digitsRight, digitsY, digitW, digitH, 0.95f * u,
+                TEXT[0], TEXT[1], TEXT[2], 1f,
+                0.20f, 0.27f, 0.33f, 0.35f);
 
-        // Needle.
-        float ang = start + sweep * frac;
-        float nc = (float) Math.cos(ang);
-        float ns = (float) Math.sin(ang);
-        g.line(dialX - nc * 2.5f * u, dialY - ns * 2.5f * u,
-                dialX + nc * (inner - 1.2f * u), dialY + ns * (inner - 1.2f * u),
-                0.7f * u, 1f, 0.42f, 0.32f, 0.95f);
-        g.circle(dialX, dialY, 1.5f * u, 16, 0.85f, 0.88f, 0.95f, 0.9f);
+        // Gear badge above, unit below — never on top of one another.
+        float colX = digitsRight + 2.6f * u;
+        String gear = car.forwardSpeed < -0.4f ? "R"
+                : (Math.abs(car.forwardSpeed) < 0.4f ? "N" : ("D" + car.gear));
+        float gearPixel = 0.78f * u;
+        float gearW = PixelFont.width(gear, gearPixel) + 2.6f * u;
+        float gearH = PixelFont.height(gearPixel) + 1.8f * u;
+        g.roundedRect(colX, digitsY, gearW, gearH, 0.8f * u,
+                ACCENT[0] * 0.32f, ACCENT[1] * 0.32f, ACCENT[2] * 0.34f, 0.9f);
+        PixelFont.drawCentered(g, gear, colX + gearW * 0.5f, digitsY + 0.9f * u, gearPixel,
+                ACCENT[0], ACCENT[1], ACCENT[2], 1f);
 
-        // Digital readout.
-        int kmh = Math.round(car.speedKmh());
-        float digitW = 4.4f * u;
-        float digitH = 7.6f * u;
-        PixelFont.sevenSegmentNumber(g, kmh, 3,
-                dialX + digitW * 1.9f, dialY - 10.6f * u, digitW, digitH, 0.85f * u,
-                0.80f, 0.95f, 1f, 0.98f,
-                0.30f, 0.40f, 0.48f, 0.16f);
-        PixelFont.drawCentered(g, "KM/S", dialX, dialY - 1.4f * u, 0.85f * u,
-                0.55f, 0.75f, 0.88f, 0.85f);
-
-        String gear = car.forwardSpeed < -0.4f ? "R" : (Math.abs(car.forwardSpeed) < 0.4f ? "N" : ("D" + car.gear));
-        PixelFont.drawCentered(g, gear, dialX, dialY + 2.4f * u, 1.5f * u,
-                0.50f, 0.95f, 0.78f, 0.95f);
-        PixelFont.drawCentered(g, car.spec.name, dialX, dialY + 10.0f * u, 0.95f * u,
-                0.62f, 0.78f, 0.92f, 0.80f);
+        PixelFont.draw(g, "KM/S", colX, digitsY + gearH + 0.8f * u, 0.58f * u,
+                TEXT_DIM[0], TEXT_DIM[1], TEXT_DIM[2], 0.95f);
     }
 
     // --------------------------------------------------------------- minimap
 
-    private void drawMinimap(HudProgram g, Car car, com.ilker.opendrive.game.Traffic traffic) {
+    private void drawMinimap(HudProgram g, Car car, Traffic traffic) {
         float viewRange = 230f;
-        float scale = mapRad / viewRange;
+        float scale = mapR / viewRange;
 
-        g.circle(mapX, mapY, mapRad + 0.7f * u, 40, 0.30f, 0.62f, 0.80f, 0.55f);
-        g.circle(mapX, mapY, mapRad, 40, 0.04f, 0.06f, 0.09f, 0.78f);
+        g.circle(mapX, mapY, mapR, 44, PANEL[0], PANEL[1], PANEL[2], 0.78f);
 
         float cosY = (float) Math.cos(car.yaw);
         float sinY = (float) Math.sin(car.yaw);
@@ -321,13 +488,13 @@ public class Hud {
         int range = (int) Math.ceil(viewRange / Terrain.CHUNK) + 1;
         int baseI = Math.round(car.x / Terrain.CHUNK);
         int baseJ = Math.round(car.z / Terrain.CHUNK);
-
         for (int k = -range; k <= range; k++) {
-            gridLine(g, car, cosY, sinY, scale, (baseI + k) * Terrain.CHUNK, true, viewRange, baseJ);
-            gridLine(g, car, cosY, sinY, scale, (baseJ + k) * Terrain.CHUNK, false, viewRange, baseI);
+            gridLine(g, car, cosY, sinY, scale, (baseI + k) * Terrain.CHUNK, true, viewRange);
+            gridLine(g, car, cosY, sinY, scale, (baseJ + k) * Terrain.CHUNK, false, viewRange);
         }
 
         int n = traffic.collectPositions(trafficScratch);
+        float limit = (mapR - 1.2f * u) * (mapR - 1.2f * u);
         for (int i = 0; i < n; i++) {
             float dx = trafficScratch[i * 2] - car.x;
             float dz = trafficScratch[i * 2 + 1] - car.z;
@@ -336,29 +503,30 @@ public class Hud {
             float sx = mapX + rgt * scale;
             float sy = mapY - fwd * scale;
             float ddx = sx - mapX, ddy = sy - mapY;
-            if (ddx * ddx + ddy * ddy > (mapRad - 0.8f * u) * (mapRad - 0.8f * u)) continue;
-            g.circle(sx, sy, 0.85f * u, 8, 1f, 0.78f, 0.28f, 0.95f);
+            if (ddx * ddx + ddy * ddy > limit) continue;
+            g.circle(sx, sy, 0.9f * u, 8, 1f, 0.76f, 0.26f, 0.95f);
         }
 
-        // The player always sits dead centre, pointing up.
-        g.triangle(mapX, mapY - 2.2f * u,
-                mapX - 1.5f * u, mapY + 1.8f * u,
-                mapX + 1.5f * u, mapY + 1.8f * u,
-                0.45f, 1f, 0.85f, 1f);
+        // The player is always dead centre, pointing up.
+        g.triangle(mapX, mapY - 2.4f * u,
+                mapX - 1.7f * u, mapY + 2.0f * u,
+                mapX + 1.7f * u, mapY + 2.0f * u,
+                ACCENT[0], ACCENT[1], ACCENT[2], 1f);
+        g.ring(mapX, mapY, mapR - 0.45f * u, mapR, 44, 0f, (float) (Math.PI * 2),
+                EDGE[0], EDGE[1], EDGE[2], 0.8f);
     }
 
     private void gridLine(HudProgram g, Car car, float cosY, float sinY, float scale,
-                          float coord, boolean vertical, float viewRange, int otherBase) {
-        int steps = 22;
+                          float coord, boolean vertical, float viewRange) {
+        int steps = 20;
         float half = viewRange * 1.1f;
         float other0 = (vertical ? car.z : car.x) - half;
         float prevSx = 0f, prevSy = 0f;
         boolean prevInside = false;
-        float limit = (mapRad - 0.5f * u) * (mapRad - 0.5f * u);
+        float limit = (mapR - 0.8f * u) * (mapR - 0.8f * u);
 
         for (int i = 0; i <= steps; i++) {
-            float t = i / (float) steps;
-            float other = other0 + 2f * half * t;
+            float other = other0 + 2f * half * i / steps;
             float wx = vertical ? coord : other;
             float wz = vertical ? other : coord;
             float dx = wx - car.x;
@@ -370,7 +538,7 @@ public class Hud {
             float ddx = sx - mapX, ddy = sy - mapY;
             boolean inside = ddx * ddx + ddy * ddy <= limit;
             if (i > 0 && inside && prevInside) {
-                g.line(prevSx, prevSy, sx, sy, 1.1f * u, 0.32f, 0.52f, 0.62f, 0.85f);
+                g.line(prevSx, prevSy, sx, sy, 1.3f * u, 0.26f, 0.42f, 0.50f, 0.9f);
             }
             prevSx = sx;
             prevSy = sy;
@@ -381,23 +549,26 @@ public class Hud {
     // ----------------------------------------------------------------- stats
 
     private void drawStats(HudProgram g, Car car, float timeOfDay, int fps) {
-        // Tucked under the minimap, clear of the buttons on narrow screens.
-        float pixel = 0.62f * u;
-        float x = 4.5f * u;
-        float y = mapY + mapRad + 3f * u;
-        float lineH = 3.6f * u;
+        panel(g, statX, statY, statW, statH, 2.2f * u, PANEL[3]);
 
-        String km = format1(car.distanceTravelled / 1000f);
-        int hours = (int) (timeOfDay * 24f) % 24;
-        int minutes = (int) ((timeOfDay * 24f - (int) (timeOfDay * 24f)) * 60f);
+        float pixel = 0.54f * u;
+        float small = 0.46f * u;
+        float x = statX + 2.2f * u;
+        float y = statY + 2.2f * u;
+        float lineH = 4f * u;
 
-        g.rect(x - 1.5f * u, y - 1.5f * u, 48f * u, lineH * 3f + 1.5f * u,
-                0.04f, 0.05f, 0.08f, 0.42f);
-        PixelFont.draw(g, "MESAFE " + km + " KM", x, y, pixel, 0.60f, 0.85f, 0.95f, 0.92f);
-        PixelFont.draw(g, "REKOR " + Math.round(car.topSpeedSeen) + " KM/S", x, y + lineH,
-                pixel, 0.95f, 0.80f, 0.45f, 0.92f);
-        PixelFont.draw(g, "SAAT " + pad2(hours) + ":" + pad2(minutes) + "   " + fps + " FPS",
-                x, y + lineH * 2f, pixel, 0.55f, 0.70f, 0.82f, 0.85f);
+        PixelFont.draw(g, car.spec.name, x, y, pixel, ACCENT[0], ACCENT[1], ACCENT[2], 1f);
+        PixelFont.draw(g, "YOL " + format1(car.distanceTravelled / 1000f) + " KM",
+                x, y + lineH, pixel, TEXT[0], TEXT[1], TEXT[2], 0.95f);
+        PixelFont.draw(g, "REKOR " + Math.round(car.topSpeedSeen) + " KM/S",
+                x, y + lineH * 2f, pixel, TEXT_DIM[0], TEXT_DIM[1], TEXT_DIM[2], 0.95f);
+
+        int totalMinutes = (int) (timeOfDay * 1440f) % 1440;
+        String clock = pad2(totalMinutes / 60) + ":" + pad2(totalMinutes % 60);
+        PixelFont.draw(g, clock, x, y + lineH * 3f, small,
+                TEXT_DIM[0], TEXT_DIM[1], TEXT_DIM[2], 0.8f);
+        PixelFont.drawRight(g, fps + " FPS", statX + statW - 2.2f * u, y + lineH * 3f, small,
+                TEXT_DIM[0], TEXT_DIM[1], TEXT_DIM[2], 0.65f);
     }
 
     private static String pad2(int v) {
@@ -409,5 +580,9 @@ public class Hud {
         int whole = (int) v;
         int frac = (int) ((v - whole) * 10f);
         return whole + "." + frac;
+    }
+
+    private static float clamp(float v, float lo, float hi) {
+        return v < lo ? lo : (v > hi ? hi : v);
     }
 }

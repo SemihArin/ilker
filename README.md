@@ -7,16 +7,16 @@ ağaçlar, sokak lambaları, trafik ve tam bir gündüz–gece döngüsü.
 Oyun motoru dahil her şey bu depodaki Java kaynağından geliyor. Hiçbir hazır
 oyun motoru, hiçbir 3B model dosyası, hiçbir doku, hiçbir ses dosyası yok —
 araçların gövdeleri, binalar, arazi ve motor sesi hepsi kod içinde üretiliyor.
-Bu yüzden APK sadece **87 KB**.
+Bu yüzden APK sadece **88 KB**.
 
 | | |
 |---|---|
-| ![Şehir, gündüz](docs/city-day.png) | ![Şehir, gece](docs/city-night.png) |
-| ![Kırsal](docs/country-day.png) | ![Garaj](docs/garage.png) |
+| ![Şehir, gündüz](docs/hud-day.png) | ![Şehir, gece](docs/hud-night.png) |
+| ![Kırsal](docs/hud-country.png) | ![Garaj](docs/garage.png) |
 
 ## Kurulum
 
-`dist/ilker-drive-1.0.apk` dosyasını telefonuna kopyala ve aç. Android
+`dist/ilker-drive-1.1.apk` dosyasını telefonuna kopyala ve aç. Android
 "bilinmeyen kaynaklardan yükleme" izni isteyecek; tarayıcına veya dosya
 yöneticine bu izni ver.
 
@@ -27,9 +27,9 @@ Oyun yatay moda kilitlidir.
 
 | Kontrol | Yer |
 |---|---|
-| Direksiyon | Sol alttaki iki ok düğmesi |
+| Direksiyon | Sol alttaki iki büyük ok pedi. Sol alt köşenin tamamı direksiyon bölgesi sayılır; ortadan solda kalan dokunuş sola, sağda kalan sağa çevirir |
 | Gaz / Fren | Sağ alttaki yuvarlak düğmeler |
-| El freni (drift) | Gazın üstündeki turuncu düğme |
+| El freni (drift) | Frenin üstündeki turuncu düğme |
 | KAM | Kamerayı değiştirir: takip → kaput → geniş açı |
 | ARAC | Garajdaki altı araç arasında geçiş yapar |
 | ISIK | Farları açar / otomatiğe alır (gece kendiliğinden yanar) |
@@ -37,7 +37,8 @@ Oyun yatay moda kilitlidir.
 | SIFIR | Takılırsan seni en yakın yola geri koyar |
 
 Sol üstte pusula gibi dönen bir mini harita, altında mesafe / hız rekoru / saat,
-ortada da hız göstergesi var. Sarı noktalar trafikteki diğer araçlar.
+altta ortada hız paneli var. Sarı noktalar trafikteki diğer araçlar. Ekranın
+ortası bilerek boş bırakıldı — bakman gereken yer orası.
 
 ## Garaj
 
@@ -92,7 +93,7 @@ dosyalarını** masaüstü JVM'de derleyip çalıştırır (`android.opengl.Matr
 yerine birebir aynı davranan bir kopya konur):
 
 ```bash
-tools/harness/run.sh            # 115 kontrol
+tools/harness/run.sh            # 142 kontrol
 tools/harness/run.sh --preview  # kontroller + docs/*.png görüntülerini yeniden üretir
 ```
 
@@ -102,9 +103,22 @@ geometrisinin indeks sınırları içinde kalması, her üçgenin doğru yöne b
 her aracın ilan ettiği son hıza ulaşması, frenin geri vitese geçmesi, el
 freninin gerçekten kaydırması, toprakta yavaşlaması ve frustum elemesi.
 
-`Preview.java` ise oyunun kendi gölgelendirici matematiğini taklit eden küçük
-bir yazılımsal rasterleştirici — yukarıdaki ekran görüntüleri onunla üretildi.
-İkisi de sadece geliştirme aracı, APK'ya girmiyorlar.
+Ayrıca **direksiyonun doğru yöne çevirmesi**: aracın gittiği yön, "sağ"ın
+tanımından (ileri × yukarı çapraz çarpımı) bağımsız olarak, üç farklı başlangıç
+açısında ve iki yönde de doğrulanıyor. Bu testin ilk hâli benim yanlış
+varsayımımı tekrarladığı için hatayı yakalayamamıştı; şimdi kodun iç
+işaret kuralına değil, geometrinin tanımına bakıyor.
+
+**Arayüz testi** ise tek bir parmağı beş farklı ekran oranında (16:9'dan 5:4'e)
+ekranın her yerinde gezdirip hiçbir noktanın aynı anda iki kontrolü birden
+tetiklemediğini doğruluyor — geliştiricinin kendi telefonunda görünmeyen,
+başkasının telefonunda sinir bozucu olan türden bir hata.
+
+`Preview.java` oyunun kendi gölgelendirici matematiğini taklit eden küçük bir
+yazılımsal rasterleştirici; `HudPreview.java` ise gerçek `Hud` kodunu masaüstünde
+çalıştırıp ürettiği üçgenleri o sahnenin üzerine çiziyor. Yukarıdaki ekran
+görüntüleri bunlarla üretildi — yani arayüz, cihaz olmadan da gerçekten
+görülerek tasarlandı. Hepsi geliştirme aracı, APK'ya girmiyorlar.
 
 ## Nasıl çalışıyor
 

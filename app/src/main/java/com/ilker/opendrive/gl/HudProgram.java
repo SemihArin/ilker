@@ -122,6 +122,66 @@ public class HudProgram {
         triangle(x0 + nx, y0 + ny, x1 - nx, y1 - ny, x0 - nx, y0 - ny, r, g, b, a);
     }
 
+    /** Filled wedge, angles in radians with +Y pointing down the screen. */
+    public void pie(float cx, float cy, float radius, float startAngle, float sweep,
+                    int segments, float r, float g, float b, float a) {
+        if (segments < 1) segments = 1;
+        for (int i = 0; i < segments; i++) {
+            float a0 = startAngle + sweep * i / segments;
+            float a1 = startAngle + sweep * (i + 1) / segments;
+            triangle(cx, cy,
+                    cx + (float) Math.cos(a0) * radius, cy + (float) Math.sin(a0) * radius,
+                    cx + (float) Math.cos(a1) * radius, cy + (float) Math.sin(a1) * radius,
+                    r, g, b, a);
+        }
+    }
+
+    /** Filled rectangle with rounded corners. */
+    public void roundedRect(float x, float y, float w, float h, float radius,
+                            float r, float g, float b, float a) {
+        float max = Math.min(w, h) * 0.5f;
+        if (radius > max) radius = max;
+        if (radius <= 0.5f) {
+            rect(x, y, w, h, r, g, b, a);
+            return;
+        }
+        rect(x + radius, y, w - 2 * radius, h, r, g, b, a);
+        rect(x, y + radius, radius, h - 2 * radius, r, g, b, a);
+        rect(x + w - radius, y + radius, radius, h - 2 * radius, r, g, b, a);
+
+        float half = (float) Math.PI * 0.5f;
+        int seg = 5;
+        pie(x + radius, y + radius, radius, (float) Math.PI, half, seg, r, g, b, a);
+        pie(x + w - radius, y + radius, radius, -half, half, seg, r, g, b, a);
+        pie(x + w - radius, y + h - radius, radius, 0f, half, seg, r, g, b, a);
+        pie(x + radius, y + h - radius, radius, half, half, seg, r, g, b, a);
+    }
+
+    /** Outline of a rounded rectangle, drawn inside the given bounds. */
+    public void roundedRectOutline(float x, float y, float w, float h, float radius,
+                                   float t, float r, float g, float b, float a) {
+        float max = Math.min(w, h) * 0.5f;
+        if (radius > max) radius = max;
+        if (radius <= 0.5f) {
+            rect(x, y, w, t, r, g, b, a);
+            rect(x, y + h - t, w, t, r, g, b, a);
+            rect(x, y + t, t, h - 2 * t, r, g, b, a);
+            rect(x + w - t, y + t, t, h - 2 * t, r, g, b, a);
+            return;
+        }
+        rect(x + radius, y, w - 2 * radius, t, r, g, b, a);
+        rect(x + radius, y + h - t, w - 2 * radius, t, r, g, b, a);
+        rect(x, y + radius, t, h - 2 * radius, r, g, b, a);
+        rect(x + w - t, y + radius, t, h - 2 * radius, r, g, b, a);
+
+        float half = (float) Math.PI * 0.5f;
+        int seg = 5;
+        ring(x + radius, y + radius, radius - t, radius, seg, (float) Math.PI, half, r, g, b, a);
+        ring(x + w - radius, y + radius, radius - t, radius, seg, -half, half, r, g, b, a);
+        ring(x + w - radius, y + h - radius, radius - t, radius, seg, 0f, half, r, g, b, a);
+        ring(x + radius, y + h - radius, radius - t, radius, seg, half, half, r, g, b, a);
+    }
+
     public void circle(float cx, float cy, float radius, int segments,
                        float r, float g, float b, float a) {
         if (segments < 3) segments = 3;

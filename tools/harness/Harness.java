@@ -31,6 +31,7 @@ public class Harness {
         carMeshes();
         physics();
         frustum();
+        hudLayout();
 
         System.out.println();
         System.out.println(failures == 0
@@ -261,18 +262,49 @@ public class Harness {
                     spec.name + " stays numerically stable");
         }
 
-        // Steering right must yaw right and actually move the car sideways.
+        // Steering must send the car the way the driver asked. This is checked
+        // against the definition of "right" — forward x up — rather than
+        // against whatever sign convention Car happens to use internally,
+        // because an earlier version of this test simply restated the bug.
         CarSpec spec = CarSpec.GARAGE[0];
-        car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
-        c.clear();
-        c.throttle = 1f;
-        for (int i = 0; i < 180; i++) car.update(dt, c);
-        float startX = car.x;
-        float startYaw = car.yaw;
-        c.steer = 1f;
-        for (int i = 0; i < 120; i++) car.update(dt, c);
-        check(car.yaw > startYaw, "steering right increases yaw");
-        check(car.x > startX, "steering right moves the car to +X from a +Z heading");
+        for (int dir = -1; dir <= 1; dir += 2) {
+            for (float startYaw : new float[]{0f, 1.9f, 4.4f}) {
+                car.reset(spec, -Terrain.LANE_OFFSET, 0f, startYaw);
+                c.clear();
+                c.throttle = 1f;
+                for (int i = 0; i < 180; i++) car.update(dt, c);
+
+                float fx = (float) Math.sin(car.yaw);
+                float fz = (float) Math.cos(car.yaw);
+                // cross((fx, 0, fz), (0, 1, 0)) = (-fz, 0, fx)
+                float rx = -fz;
+                float rz = fx;
+                float x0 = car.x, z0 = car.z;
+
+                // Short enough that the car cannot swing past a quarter turn,
+                // which would wrap the sign of the measurements below.
+                c.steer = dir;
+                for (int i = 0; i < 20; i++) car.update(dt, c);
+
+                float sideways = (car.x - x0) * rx + (car.z - z0) * rz;
+                float turned = (float) Math.sin(car.yaw) * rx + (float) Math.cos(car.yaw) * rz;
+                String which = dir > 0 ? "right" : "left";
+                check(sideways * dir > 0f,
+                        "steering " + which + " moves the car to its " + which
+                                + " (yaw " + startYaw + ", got " + sideways + ")");
+                check(turned * dir > 0f,
+                        "steering " + which + " swings the nose " + which
+                                + " (yaw " + startYaw + ")");
+            }
+        }
+
+        // The body transform has to agree with the heading the physics uses,
+        // or the car will visibly drive sideways.
+        car.reset(spec, 0f, 0f, 0.7f);
+        float[] m = car.modelMatrix();
+        float fwdX = (float) Math.sin(0.7f), fwdZ = (float) Math.cos(0.7f);
+        check(m[8] * fwdX + m[10] * fwdZ > 0.999f, "model matrix sends local +Z along the heading");
+        check(m[0] * (-fwdZ) + m[2] * fwdX < -0.999f, "model matrix local +X is the car's left");
 
         // Braking stops the car, then reverses it.
         car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
@@ -325,6 +357,66 @@ public class Harness {
     }
 
     // ------------------------------------------------------------------
+
+    /**
+     * Sweeps a single pointer across the whole screen at several aspect ratios
+     * and checks that no position ever drives two conflicting controls. A
+     * layout mistake here is invisible on the developer's own phone and
+     * infuriating on someone else's.
+     */
+    static void hudLayout() {
+        System.out.println("[interface]");
+        int[][] sizes = {
+                {1280, 720},    // 16:9
+                {2340, 1080},   // 19.5:9, a typical modern phone
+                {2400, 1080},   // 20:9
+                {1024, 768},    // 4:3 tablet
+                {1280, 1024},   // 5:4, about as square as it gets
+        };
+
+        for (int[] size : sizes) {
+            com.ilker.opendrive.ui.Hud hud = new com.ilker.opendrive.ui.Hud();
+            hud.layout(size[0], size[1]);
+            Controls c = new Controls();
+            float[] xs = new float[1];
+            float[] ys = new float[1];
+            String label = size[0] + "x" + size[1];
+
+            int conflicts = 0;
+            int steerReach = 0;
+            int gasReach = 0;
+            int step = Math.max(4, size[1] / 120);
+
+            for (int y = 0; y < size[1]; y += step) {
+                for (int x = 0; x < size[0]; x += step) {
+                    hud.processInput(xs, ys, 0, c, 0f, false); // release first
+                    xs[0] = x;
+                    ys[0] = y;
+                    hud.processInput(xs, ys, 1, c, 0f, false);
+
+                    boolean throttle = c.throttle > 0f;
+                    boolean brake = c.brake > 0f;
+                    boolean hand = c.handbrake;
+                    boolean steer = c.steer != 0f;
+                    boolean button = false;
+                    for (int b = 0; b <= 4; b++) {
+                        if (hud.wasTapped(b)) button = true;
+                    }
+                    if (throttle) gasReach++;
+                    if (steer) steerReach++;
+
+                    int pedals = (throttle ? 1 : 0) + (brake ? 1 : 0) + (hand ? 1 : 0);
+                    if (pedals > 1) conflicts++;
+                    if (pedals > 0 && (steer || button)) conflicts++;
+                    if (steer && button) conflicts++;
+                }
+            }
+            check(conflicts == 0, label + ": no touch point drives two controls at once ("
+                    + conflicts + " did)");
+            check(steerReach > 0, label + ": the steering pads are reachable");
+            check(gasReach > 0, label + ": the accelerator is reachable");
+        }
+    }
 
     static void frustum() {
         System.out.println("[culling]");

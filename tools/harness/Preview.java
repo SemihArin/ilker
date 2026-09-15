@@ -20,9 +20,17 @@ import java.nio.ShortBuffer;
  */
 public class Preview {
 
-    static final int W = 960, H = 540;
+    static int W = 960, H = 540;
     static float[] color = new float[W * H * 3];
     static float[] depth = new float[W * H];
+
+    /** Re-targets the rasteriser at a different screen shape. */
+    static void resize(int w, int h) {
+        W = w;
+        H = h;
+        color = new float[W * H * 3];
+        depth = new float[W * H];
+    }
 
     static float[] sunDir = new float[3];
     static float[] sunColor = new float[3];
@@ -67,9 +75,20 @@ public class Preview {
         return new int[]{0, 0};
     }
 
+    /** Set by {@link #scene}, so callers can draw the interface over it. */
+    static Car lastCar;
+
     static void shot(File dir, String name, float timeOfDay, int[] chunk, int specIndex)
             throws Exception {
         lighting(timeOfDay);
+        scene(chunk, specIndex);
+        write(dir, name);
+        System.out.printf("  %-18s chunk %d,%d  %d km/h%n", name, chunk[0], chunk[1],
+                Math.round(lastCar.speedKmh()));
+    }
+
+    /** Renders the world and the player's car into the colour buffer. */
+    static void scene(int[] chunk, int specIndex) {
         clear();
 
         float px = chunk[0] * Terrain.CHUNK - Terrain.LANE_OFFSET;
@@ -118,9 +137,7 @@ public class Preview {
             mesh(wv, wi, wheel.indexCount(), vp, car.wheelMatrix(i));
         }
 
-        write(dir, name);
-        System.out.printf("  %-18s chunk %d,%d  %d km/h%n", name, chunk[0], chunk[1],
-                Math.round(car.speedKmh()));
+        lastCar = car;
     }
 
     static void garage(File dir) throws Exception {

@@ -76,11 +76,14 @@ public class Car {
 
         float fx = (float) Math.sin(yaw);
         float fz = (float) Math.cos(yaw);
-        float rx = (float) Math.cos(yaw);
-        float rz = -(float) Math.sin(yaw);
+        // The driver's right is forward x up. With +Y up and forward at
+        // (sin, cos) that comes out as (-cos, sin) — NOT (cos, -sin), which is
+        // the car's left and would turn the wheel the wrong way.
+        float rightX = -(float) Math.cos(yaw);
+        float rightZ = (float) Math.sin(yaw);
 
         float vLong = vx * fx + vz * fz;
-        float vLat = vx * rx + vz * rz;
+        float vLat = vx * rightX + vz * rightZ;  // positive means sliding right
 
         float surface = Terrain.surfaceGrip(x, z);
 
@@ -134,15 +137,18 @@ public class Car {
 
         // ---- world velocity keeps its direction while the car rotates,
         //      which is what produces understeer and opposite lock
-        vx = fx * vLong + rx * vLat;
-        vz = fz * vLong + rz * vLat;
+        vx = fx * vLong + rightX * vLat;
+        vz = fz * vLong + rightZ * vLat;
 
+        // steerAngle > 0 means turning right. Rotating the heading towards the
+        // right vector means yaw has to decrease, since d(sin y, cos y)/dy
+        // points to the car's left.
         float yawRate = (vLong / spec.wheelbase) * (float) Math.tan(steerAngle);
         if (c.handbrake) yawRate *= 1.4f;
         if (yawRate > 2.6f) yawRate = 2.6f;
         if (yawRate < -2.6f) yawRate = -2.6f;
-        yaw += yawRate * dt;
-        if (yaw > Math.PI * 2) yaw -= Math.PI * 2;
+        yaw -= yawRate * dt;
+        if (yaw > Math.PI * 2) yaw -= (float) (Math.PI * 2);
         if (yaw < 0) yaw += (float) (Math.PI * 2);
 
         float dx = vx * dt;
@@ -170,15 +176,17 @@ public class Car {
         float halfTrack = spec.track * 0.5f;
         float ahead = Terrain.surfaceHeight(x + fx * halfBase, z + fz * halfBase);
         float behind = Terrain.surfaceHeight(x - fx * halfBase, z - fz * halfBase);
-        float rightH = Terrain.surfaceHeight(x + rx * halfTrack, z + rz * halfTrack);
-        float leftH = Terrain.surfaceHeight(x - rx * halfTrack, z - rz * halfTrack);
-        float slopePitch = (float) Math.atan2(ahead - behind, spec.wheelbase);
-        float slopeRoll = (float) Math.atan2(rightH - leftH, spec.track);
+        float rightH = Terrain.surfaceHeight(x + rightX * halfTrack, z + rightZ * halfTrack);
+        float leftH = Terrain.surfaceHeight(x - rightX * halfTrack, z - rightZ * halfTrack);
+        float slopePitch = (float) Math.atan2(ahead - behind, spec.wheelbase);   // + = nose up
+        float slopeRoll = (float) Math.atan2(rightH - leftH, spec.track);        // + = right side up
 
         float longAccel = (vLong - lastForwardSpeed) / dt;
         lastForwardSpeed = vLong;
-        float squat = clamp(-longAccel * 0.009f, -0.075f, 0.075f);
-        float lean = clamp(-yawRate * vLong * 0.010f, -0.13f, 0.13f);
+        // Accelerating lifts the nose; in a right-hand bend the body leans out
+        // to the left, so the right-hand side comes up.
+        float squat = clamp(longAccel * 0.009f, -0.075f, 0.075f);
+        float lean = clamp(yawRate * vLong * 0.010f, -0.13f, 0.13f);
 
         float blend = Math.min(1f, dt * 7f);
         bodyPitch += (squat - bodyPitch) * blend;
@@ -203,13 +211,24 @@ public class Car {
         return (float) Math.cos(yaw);
     }
 
+    /** World-space direction of the driver's right hand. */
+    public float rightX() {
+        return -(float) Math.cos(yaw);
+    }
+
+    public float rightZ() {
+        return (float) Math.sin(yaw);
+    }
+
     /** Body transform, including the visual lean. */
     public float[] modelMatrix() {
         Matrix.setIdentityM(model, 0);
         Matrix.translateM(model, 0, x, y, z);
         Matrix.rotateM(model, 0, (float) Math.toDegrees(yaw), 0f, 1f, 0f);
+        // Local +X is the car's left once the yaw is applied, so both of these
+        // are negated to read as "nose up" and "right side up".
         Matrix.rotateM(model, 0, (float) -Math.toDegrees(visualPitch), 1f, 0f, 0f);
-        Matrix.rotateM(model, 0, (float) Math.toDegrees(visualRoll), 0f, 0f, 1f);
+        Matrix.rotateM(model, 0, (float) -Math.toDegrees(visualRoll), 0f, 0f, 1f);
         return model;
     }
 
@@ -223,7 +242,7 @@ public class Car {
         System.arraycopy(scratch, 0, wheelModel, 0, 16);
         Matrix.translateM(wheelModel, 0, sideSign * spec.track * 0.5f, spec.wheelRadius, zOff);
         if (front) {
-            Matrix.rotateM(wheelModel, 0, (float) Math.toDegrees(steerAngle), 0f, 1f, 0f);
+            Matrix.rotateM(wheelModel, 0, (float) -Math.toDegrees(steerAngle), 0f, 1f, 0f);
         }
         Matrix.rotateM(wheelModel, 0, (float) Math.toDegrees(wheelSpin), 1f, 0f, 0f);
         return wheelModel;

@@ -98,12 +98,12 @@ public class Traffic {
 
             float fx = (float) Math.sin(u.yaw);
             float fz = (float) Math.cos(u.yaw);
-            float rx = (float) Math.cos(u.yaw);
-            float rz = -fx;
+            float rightX = -fz;
+            float rightZ = fx;
             float ahead = Terrain.surfaceHeight(u.x + fx * 1.4f, u.z + fz * 1.4f);
             float behind = Terrain.surfaceHeight(u.x - fx * 1.4f, u.z - fz * 1.4f);
-            float right = Terrain.surfaceHeight(u.x + rx * 0.8f, u.z + rz * 0.8f);
-            float left = Terrain.surfaceHeight(u.x - rx * 0.8f, u.z - rz * 0.8f);
+            float right = Terrain.surfaceHeight(u.x + rightX * 0.8f, u.z + rightZ * 0.8f);
+            float left = Terrain.surfaceHeight(u.x - rightX * 0.8f, u.z - rightZ * 0.8f);
             u.pitch = (float) Math.atan2(ahead - behind, 2.8f);
             u.roll = (float) Math.atan2(right - left, 1.6f);
 
@@ -205,7 +205,7 @@ public class Traffic {
             Matrix.translateM(model, 0, u.x, u.y, u.z);
             Matrix.rotateM(model, 0, (float) Math.toDegrees(u.yaw), 0f, 1f, 0f);
             Matrix.rotateM(model, 0, (float) -Math.toDegrees(u.pitch), 1f, 0f, 0f);
-            Matrix.rotateM(model, 0, (float) Math.toDegrees(u.roll), 0f, 0f, 1f);
+            Matrix.rotateM(model, 0, (float) -Math.toDegrees(u.roll), 0f, 0f, 1f);
             Matrix.multiplyMM(mvpScratch, 0, viewProj, 0, model, 0);
             program.setMatrices(mvpScratch, model);
 
