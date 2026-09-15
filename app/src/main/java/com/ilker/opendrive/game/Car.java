@@ -6,13 +6,15 @@ import com.ilker.opendrive.world.Obstacles;
 import com.ilker.opendrive.world.Terrain;
 
 /**
- * Arcade vehicle model.
+ * Arcade vehicle model, built around drifting.
  *
- * Cornering comes from a bicycle-model yaw rate plus a lateral velocity that
- * is scrubbed off gradually. What makes it feel like a car rather than a
- * sliding box is that the scrub rate collapses once the slip angle passes a
- * peak: below it the tyres bite, above it they let go and keep letting go
- * until the driver reduces the angle. That is what makes opposite lock work.
+ * Cornering is a two-axle model: each axle gets its own slip angle, its own
+ * lateral force from a tyre curve that peaks and then eases off, and the
+ * difference between the two is a torque about the car's centre. The yaw rate
+ * is therefore a state with inertia, not a function of the steering angle —
+ * which is what lets the back step out, carry round, and be caught on opposite
+ * lock. A car whose rear tyres give up before its fronts oversteers; loading
+ * the rear axle with power steals the grip it was using to hold the line.
  *
  * Longitudinally the engine drives through a real gearbox — a torque curve
  * multiplied by the gear the car happens to be in — so first gear overwhelms
@@ -38,6 +40,14 @@ public class Car {
     private static final float IDLE_REVS = 0.12f;
     /** Rolling resistance. Small — it is tyres on tarmac, not a handbrake. */
     private static final float ROLLING = 0.35f;
+    /** How much opposite lock the car winds on by itself, 0..1. */
+    private static final float COUNTER_STEER_HELP = 0.55f;
+    /** Sub-steps for the lateral solver; the tyres are stiff at low speed. */
+    private static final int LATERAL_STEPS = 4;
+    /** How fast the car can rotate, rad/s. Low enough to leave a thumb time. */
+    private static final float YAW_MAX = 2.35f;
+    /** Rotation decays on its own, so a slide settles instead of running away. */
+    private static final float YAW_DAMPING = 0.20f;
 
     public CarSpec spec;
 
@@ -54,6 +64,13 @@ public class Car {
 
     /** Angle between where the car points and where it is actually going. */
     public float slipAngle;
+    /** Slip angle at each axle; the rear one is what a drift is made of. */
+    public float slipFront;
+    public float slipRear;
+    /** Rate of rotation, positive turning right. A real state, with inertia. */
+    public float yawRate;
+    /** Steering actually at the wheels, including the counter-steer help. */
+    public float effectiveSteer;
     /** 0..1, how much the driven wheels are spinning up. */
     public float wheelspin;
     /** 0..1, how much the brakes have the wheels locked. */
@@ -77,6 +94,12 @@ public class Car {
     public float driftNow;
     public float driftBest;
     public float driftTotal;
+    /** Builds the longer a slide is held; resets when it ends. */
+    public int driftMultiplier = 1;
+    /** Points from the slide just banked, for the interface to flash. */
+    public float driftBanked;
+    public float driftBankedTimer;
+    private float driftHeld;
     private float driftGrace;
 
     /** Speed of the last impact in m/s, decaying; drives haptics and audio. */
@@ -131,6 +154,14 @@ public class Car {
         sliding = false;
         driftNow = 0f;
         driftGrace = 0f;
+        driftHeld = 0f;
+        driftMultiplier = 1;
+        driftBanked = 0f;
+        driftBankedTimer = 0f;
+        yawRate = 0f;
+        slipFront = 0f;
+        slipRear = 0f;
+        effectiveSteer = 0f;
         impact = 0f;
         lastForwardSpeed = 0f;
         gearIndex = 0;
@@ -166,7 +197,12 @@ public class Car {
         float vLat = vx * rightX + vz * rightZ;  // positive means sliding right
 
         float surface = Terrain.surfaceGrip(x, z);
-        float absV = Math.abs(vLong);
+        // How fast the car is travelling — not how fast it is travelling
+        // forwards. Sideways at 80 km/h is still 80 km/h, and everything that
+        // reacts to speed (drag, rolling resistance, traction, the drift
+        // scoring) has to see it that way or a car turned fully sideways meets
+        // no resistance at all and slides for ever.
+        float absV = (float) Math.sqrt(vLong * vLong + vLat * vLat);
 
         // ---- how the ground lies under the car, needed before the engine so
         //      gravity along the slope can be part of the same step
@@ -179,14 +215,24 @@ public class Car {
         float slopePitch = (float) Math.atan2(ahead - behind, spec.wheelbase);   // + = nose up
         float slopeRoll = (float) Math.atan2(rightH - leftH, spec.track);        // + = right side up
 
-        // ---- steering: less lock the faster you go, and it straightens up
-        //      faster than it winds on, so a twitch does not upset the car
+        // ---- steering. Plenty of lock is kept at speed: a drift is held on
+        //      opposite lock, and a car that runs out of it just spins.
         float speedFrac = Math.min(1f, absV / (spec.topSpeed * 0.62f));
-        float maxSteer = 0.62f - 0.46f * speedFrac;
+        float maxSteer = spec.steerLock * (1f - 0.30f * speedFrac);
         float targetSteer = c.steer * maxSteer;
+
+        // Correcting a slide has to be quicker than provoking one, and a thumb
+        // cannot move as fast as a wheel — so the car winds on opposite lock
+        // of its own accord, backing off as the player takes over.
+        float catchDir = Math.signum(slipAngle);
+        boolean correcting = catchDir != 0f && Math.signum(c.steer) == catchDir;
         boolean winding = Math.abs(targetSteer) > Math.abs(steerAngle);
-        float steerRate = spec.steerRate * (winding ? 3.2f : 5.6f);
-        steerAngle += (targetSteer - steerAngle) * Math.min(1f, dt * steerRate);
+        float steerSpeed = spec.steerRate * (correcting ? 6.2f : (winding ? 3.4f : 5.2f));
+        steerAngle += (targetSteer - steerAngle) * Math.min(1f, dt * steerSpeed);
+
+        float assistGain = COUNTER_STEER_HELP * (1f - Math.min(1f, Math.abs(c.steer) * 1.15f));
+        float assist = clamp(slipAngle * assistGain, -0.40f, 0.40f);
+        effectiveSteer = clamp(steerAngle + assist, -spec.steerLock, spec.steerLock);
 
         // ---- gearbox and engine
         updateGearbox(dt, vLong, c);
@@ -235,7 +281,13 @@ public class Car {
                 // What the tyres can take. Low enough that a powerful car in
                 // first gear overwhelms them and a small hatchback does not.
                 float traction = ((1.6f + 4.0f * surface) + 5.0f * surface * Math.min(1f, absV / 18f))
-                        * (spec.grip / 13f);
+                        * (spec.gripRear / 4.6f);
+                // A tyre already sliding sideways has far less left to put the
+                // power down with. This closes the loop that makes a drift
+                // something you hold on the throttle rather than something
+                // that happens to you: sliding spins the rear up, spinning
+                // rear keeps it sliding, and lifting ends it.
+                traction *= 1f - 0.55f * Math.min(1f, Math.abs(slipAngle) / 0.55f);
                 if (c.handbrake) traction *= 0.35f;
                 if (pull > traction) {
                     wheelspin = Math.min(1f, (pull - traction) / pull);
@@ -270,14 +322,21 @@ public class Car {
         }
 
         vLong += drive * dt;
-        float scrub = resist * dt;
-        if (vLong > 0f) {
-            vLong = Math.max(0f, vLong - scrub);
-        } else if (vLong < 0f) {
-            vLong = Math.min(0f, vLong + scrub);
+
+        // Drag and rolling resistance pull against the direction of travel, so
+        // they have to be taken off both components. Scaling them together
+        // also keeps the old guarantee that resistance can stop the car but
+        // never drag it backwards.
+        float travelling = (float) Math.sqrt(vLong * vLong + vLat * vLat);
+        if (travelling > 1e-4f) {
+            float take = Math.min(1f, (resist * dt) / travelling);
+            vLong -= vLong * take;
+            vLat -= vLat * take;
         }
-        if (c.handbrake && !airborne && Math.abs(vLong) < 1.2f && c.throttle < 0.05f) {
+        if (c.handbrake && !airborne && travelling < 1.2f && c.throttle < 0.05f) {
             vLong = 0f;   // the handbrake holds the car on a hill
+            vLat = 0f;
+            yawRate = 0f;
         }
         if (inReverse && vLong > 0.4f) {
             inReverse = false;
@@ -291,43 +350,86 @@ public class Car {
         float longAccel = (vLong - lastForwardSpeed) / dt;
         lastForwardSpeed = vLong;
 
-        // ---- lateral grip, with a breakaway past the peak slip angle
-        slipAngle = (float) Math.atan2(vLat, absV + 1.2f);
-        float slip = Math.abs(slipAngle);
-        float peak = 0.15f;
-        float bite = slip <= peak ? 1f : Math.max(0.30f, 1f - (slip - peak) * 1.9f);
+        // ---- lateral dynamics: two axles, a tyre curve, real yaw inertia.
+        //      The yaw rate is a state now rather than a function of the
+        //      steering angle, so the car carries rotation and has to be
+        //      caught — which is the whole difference between a car that
+        //      drifts and a car that merely slides.
+        float axleFront = spec.wheelbase * (1f - spec.frontWeight);
+        float axleRear = spec.wheelbase * spec.frontWeight;
+        float izz = spec.wheelbase * spec.wheelbase * 0.30f;
 
-        float gripRate = spec.grip * (0.5f + 0.5f * surface) * bite;
-        if (c.handbrake) gripRate *= 0.16f;
-        gripRate *= (1f - 0.28f * Math.min(1f, absV / spec.topSpeed));
-        gripRate *= (1f - 0.45f * wheelspin);
-        if (airborne) gripRate = 0f;
-        float latLoss = 1f - (float) Math.exp(-gripRate * dt);
-        vLat -= vLat * latLoss;
-        if (Math.abs(vLat) > spec.topSpeed * 0.7f) {
-            vLat = Math.signum(vLat) * spec.topSpeed * 0.7f;
+        float loadShift = clamp(longAccel / 8f, -1f, 1f);
+        float gripF = spec.gripFront * surface * (1f - 0.24f * loadShift);
+        float gripR = spec.gripRear * surface * (1f + 0.24f * loadShift);
+
+        // Friction circle: whatever the rear axle spends driving, it cannot
+        // spend gripping. This is where power oversteer comes from.
+        float longShare = Math.min(1f, Math.abs(drive) / Math.max(0.5f, spec.gripRear * surface));
+        gripR *= (float) Math.sqrt(Math.max(0.06f, 1f - longShare * longShare));
+        // Spinning tyres have almost nothing left sideways. This is the lever
+        // the player actually holds a drift with: the throttle.
+        gripR *= 1f - 0.55f * wheelspin;
+        if (c.handbrake) gripR *= 0.15f;
+        if (lockup > 0f) {
+            gripF *= 1f - 0.60f * lockup;
+            gripR *= 1f - 0.60f * lockup;
+        }
+        if (airborne) {
+            gripF = 0f;
+            gripR = 0f;
         }
 
-        // ---- world velocity keeps its direction while the car rotates,
-        //      which is what produces understeer and opposite lock
-        vx = fx * vLong + rightX * vLat;
-        vz = fz * vLong + rightZ * vLat;
+        // Crawling and reverse fall back to steering geometry, so parking stays
+        // predictable and the solver never divides by nothing.
+        float forwardness = clamp((absV - 1.5f) / 6f, 0f, 1f);
 
-        // steerAngle > 0 means turning right. Rotating the heading towards the
-        // right vector means yaw has to decrease, since d(sin y, cos y)/dy
-        // points to the car's left.
-        float yawRate = (vLong / spec.wheelbase) * (float) Math.tan(steerAngle);
-        // Locked wheels do not steer, and weight transfer decides whether the
-        // car tucks in or washes wide.
-        float transfer = clamp(longAccel / 9f, -1f, 1f);
-        yawRate *= (1f - 0.65f * lockup) * (1f - 0.20f * transfer);
-        if (c.handbrake) yawRate *= 1.4f;
-        if (airborne) yawRate *= 0.25f;   // a little air steering, no more
-        if (yawRate > 2.6f) yawRate = 2.6f;
-        if (yawRate < -2.6f) yawRate = -2.6f;
-        yaw -= yawRate * dt;
+        float h = dt / LATERAL_STEPS;
+        for (int step = 0; step < LATERAL_STEPS; step++) {
+            float uRef = Math.max(Math.abs(vLong), 2.4f);
+            slipFront = (float) Math.atan2(vLat + yawRate * axleFront, uRef) - effectiveSteer;
+            slipRear = (float) Math.atan2(vLat - yawRate * axleRear, uRef);
+
+            float fyF = -tyreForce(slipFront, gripF) * forwardness;
+            float fyR = -tyreForce(slipRear, gripR) * forwardness;
+
+            vLat += (fyF + fyR) * h;
+            yawRate += ((axleFront * fyF - axleRear * fyR) / izz) * h;
+
+            float kinematic = (vLong / spec.wheelbase) * (float) Math.tan(effectiveSteer);
+            yawRate += (kinematic - yawRate) * (1f - forwardness) * Math.min(1f, h * 14f);
+
+            // Rotation bleeds off on its own. Without this the car spins up to
+            // the limit and stays there, which on a phone is unrecoverable:
+            // by the time a thumb has moved, the car is backwards.
+            yawRate -= yawRate * YAW_DAMPING * h;
+            if (yawRate > YAW_MAX) yawRate = YAW_MAX;
+            if (yawRate < -YAW_MAX) yawRate = -YAW_MAX;
+
+            // Turning the body also turns the frame the velocity is measured
+            // in, and that rotation is what carries the car round the corner.
+            float turn = yawRate * h;
+            float nu = vLong + vLat * turn;
+            float nv = vLat - vLong * turn;
+            vLong = nu;
+            vLat = nv;
+            yaw -= turn;
+        }
         if (yaw > Math.PI * 2) yaw -= (float) (Math.PI * 2);
         if (yaw < 0) yaw += (float) (Math.PI * 2);
+
+        if (Math.abs(vLat) > spec.topSpeed * 0.85f) {
+            vLat = Math.signum(vLat) * spec.topSpeed * 0.85f;
+        }
+        slipAngle = absV > 1.2f
+                ? (float) Math.atan2(vLat, Math.max(Math.abs(vLong), 0.7f))
+                : 0f;
+
+        // Recompose the world velocity onto the heading the step ended on.
+        float endFx = (float) Math.sin(yaw);
+        float endFz = (float) Math.cos(yaw);
+        vx = endFx * vLong - (float) Math.cos(yaw) * vLat;
+        vz = endFz * vLong + (float) Math.sin(yaw) * vLat;
 
         float dx = vx * dt;
         float dz = vz * dt;
@@ -339,8 +441,10 @@ public class Car {
         lateralSpeed = vLat;
         if (speedKmh() > topSpeedSeen) topSpeedSeen = speedKmh();
 
-        sliding = (slip > 0.16f && absV > 5f) || wheelspin > 0.15f || lockup > 0.3f;
-        updateDrift(dt, slip, absV);
+        float slip = Math.abs(slipAngle);
+        float travelSpeed = (float) Math.sqrt(vLong * vLong + vLat * vLat);
+        sliding = (slip > 0.16f && travelSpeed > 5f) || wheelspin > 0.15f || lockup > 0.3f;
+        updateDrift(dt, slip, travelSpeed);
 
         impact = Math.max(0f, impact - dt * 14f);
         landing = Math.max(0f, landing - dt * 20f);
@@ -372,6 +476,16 @@ public class Car {
             visualPitch = slopePitch + bodyPitch;
             visualRoll = slopeRoll + bodyRoll;
         }
+    }
+
+    /**
+     * Lateral force from one axle against its slip angle: a magic-formula
+     * shape that climbs to a peak around ten degrees and then eases off
+     * instead of collapsing. The gentle tail is what makes a big slip angle
+     * something a driver can hold rather than a cliff to fall off.
+     */
+    private static float tyreForce(float slip, float peak) {
+        return peak * (float) Math.sin(1.55 * Math.atan(9.0 * slip));
     }
 
     /**
@@ -488,18 +602,49 @@ public class Car {
         y = bodyY;
     }
 
-    /** A slide banks its points once the car has been straight for a moment. */
+    /**
+     * Drift scoring: angle times speed, multiplied by how long the slide has
+     * been held, banked when the car comes straight again — and lost entirely
+     * if it hits something, which is what makes a long one worth holding.
+     */
     private void updateDrift(float dt, float slip, float absV) {
-        if (slip > 0.20f && absV > 7f) {
-            driftNow += absV * slip * dt * 8f;
-            driftGrace = 0.7f;
+        driftBankedTimer = Math.max(0f, driftBankedTimer - dt);
+
+        boolean drifting = slip > 0.21f && absV > 6f && !airborne;
+        if (drifting) {
+            driftHeld += dt;
+            float degrees = slip * 57.2958f;
+            driftNow += degrees * (absV * 3.6f) * 0.016f * driftMultiplier * dt;
+            driftGrace = 0.9f;
         } else if (driftGrace > 0f) {
             driftGrace -= dt;
+            // Swapping from one slide to the next takes the car through
+            // straight ahead. That transition is the skilful part of a run,
+            // so the clock keeps going: breaking the chain there would punish
+            // exactly the thing worth rewarding.
+            driftHeld += dt;
         } else if (driftNow > 0f) {
-            driftTotal += driftNow;
-            if (driftNow > driftBest) driftBest = driftNow;
-            driftNow = 0f;
+            bankDrift();
         }
+        driftMultiplier = Math.min(5, 1 + (int) (driftHeld / 2.0f));
+    }
+
+    private void bankDrift() {
+        driftTotal += driftNow;
+        if (driftNow > driftBest) driftBest = driftNow;
+        driftBanked = driftNow;
+        driftBankedTimer = 2.4f;
+        driftNow = 0f;
+        driftHeld = 0f;
+        driftMultiplier = 1;
+    }
+
+    /** A hard enough knock loses whatever the current slide had earned. */
+    public void loseDrift() {
+        driftNow = 0f;
+        driftHeld = 0f;
+        driftGrace = 0f;
+        driftMultiplier = 1;
     }
 
     /**
@@ -555,7 +700,9 @@ public class Car {
 
         forwardSpeed = vx * forwardX() + vz * forwardZ();
         lateralSpeed = vx * rightX() + vz * rightZ();
+        yawRate *= 0.5f;
         if (into > impact) impact = into;
+        if (into > 3f) loseDrift();
         return into;
     }
 

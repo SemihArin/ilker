@@ -61,6 +61,7 @@ public class Hud {
     private float steerShown;
     private float steerPressure;
     private float driftShown;
+    private float driftAngleShown;
 
     private final float[] trafficScratch = new float[64];
 
@@ -490,29 +491,82 @@ public class Hud {
 
     /** Live drift score, shown only while the car is actually sideways. */
     private void drawDrift(HudProgram g, Car car) {
-        float target = car.driftNow > 1f ? 1f : 0f;
+        // The meter stays up for a moment after a run banks, so the player
+        // actually sees what the slide was worth.
+        boolean live = car.driftNow > 1f;
+        float target = (live || car.driftBankedTimer > 0f) ? 1f : 0f;
         driftShown += (target - driftShown) * 0.12f;
         if (driftShown < 0.02f) return;
 
+        float shownAngle = Math.abs(car.slipAngle) * 57.2958f;
+        driftAngleShown += (shownAngle - driftAngleShown) * 0.25f;
+
         // Top centre, under the notification slot: clear of the minimap, clear
         // of the stats, and clear of the car — which is the point.
-        // Label over number rather than beside it: a long slide runs into four
-        // digits, and side by side they collide.
-        float w = 30f * u;
-        float h = 13f * u;
+        float w = 42f * u;
+        float h = 20f * u;
         float left = mapX + mapR + 2f * u;
         float cx = (left + width - 3f * u) * 0.5f;
         float x = cx - w * 0.5f;
         float y = btnY + btnH + 11.8f * u;
         float a = driftShown;
+        float pad = 2.6f * u;
 
-        g.roundedRect(x, y, w, h, 2f * u, PANEL[0], PANEL[1], PANEL[2], 0.80f * a);
+        g.roundedRect(x, y, w, h, 2f * u, PANEL[0], PANEL[1], PANEL[2], 0.82f * a);
         g.roundedRectOutline(x, y, w, h, 2f * u, 0.3f * u,
                 HAND[0], HAND[1], HAND[2], 0.9f * a);
-        PixelFont.drawCentered(g, "DRIFT", cx, y + 1.5f * u, 0.5f * u,
-                HAND[0], HAND[1], HAND[2], a);
-        PixelFont.drawCentered(g, Integer.toString(Math.round(car.driftNow)),
-                cx, y + 5.6f * u, 0.95f * u, TEXT[0], TEXT[1], TEXT[2], a);
+
+        PixelFont.draw(g, "DRIFT", x + pad, y + 1.8f * u, 0.46f * u,
+                HAND[0], HAND[1], HAND[2], a * 0.9f);
+
+        // The multiplier is the reason to keep holding the slide, so it is
+        // always on show — dim at one, lit and solid once it is climbing.
+        String mult = "X" + car.driftMultiplier;
+        float mw = PixelFont.width(mult, 0.75f * u);
+        float chipW = mw + 2.8f * u;
+        float chipX = x + w - chipW - pad;
+        if (car.driftMultiplier > 1) {
+            float glow = 0.5f + 0.1f * car.driftMultiplier;
+            g.roundedRect(chipX, y + 1.2f * u, chipW, 6.4f * u, 1.3f * u,
+                    HAND[0] * glow, HAND[1] * glow, HAND[2] * glow, 0.9f * a);
+            PixelFont.draw(g, mult, chipX + 1.4f * u, y + 2.4f * u, 0.75f * u,
+                    0.06f, 0.05f, 0.04f, a);
+        } else {
+            PixelFont.draw(g, mult, chipX + 1.4f * u, y + 2.4f * u, 0.75f * u,
+                    TEXT_DIM[0], TEXT_DIM[1], TEXT_DIM[2], 0.7f * a);
+        }
+
+        // Score big on the left, the live angle small on the right.
+        PixelFont.draw(g, Integer.toString(Math.round(car.driftNow)),
+                x + pad, y + 8.0f * u, 0.9f * u, TEXT[0], TEXT[1], TEXT[2], a);
+        PixelFont.drawRight(g, Math.round(driftAngleShown) + " ACI", x + w - pad,
+                y + 9.4f * u, 0.5f * u, TEXT_DIM[0], TEXT_DIM[1], TEXT_DIM[2], 0.9f * a);
+
+        // Angle bar along the bottom. The tick marks where the tyres stop
+        // gripping and start paying — past it is where the points are.
+        float barX = x + pad;
+        float barW = w - 2f * pad;
+        float barY = y + h - 3.8f * u;
+        float full = 70f;
+        g.roundedRect(barX, barY, barW, 1.8f * u, 0.9f * u,
+                TEXT_DIM[0] * 0.3f, TEXT_DIM[1] * 0.3f, TEXT_DIM[2] * 0.3f, 0.85f * a);
+        float fill = Math.min(1f, driftAngleShown / full);
+        // Amber while it builds, red once the slide is deeper than it is worth.
+        float hot = Math.min(1f, Math.max(0f, (driftAngleShown - 45f) / 25f));
+        if (fill > 0.02f) {
+            g.roundedRect(barX, barY, Math.max(2f * u, barW * fill), 1.8f * u, 0.9f * u,
+                    HAND[0], HAND[1] * (1f - 0.55f * hot), HAND[2] * (1f - 0.8f * hot), a);
+        }
+        float tick = barX + barW * (12f / full);    // the scoring threshold
+        g.rect(tick, barY - 0.7f * u, 0.36f * u, 3.2f * u,
+                TEXT[0], TEXT[1], TEXT[2], 0.6f * a);
+
+        // What the run just paid, flashed above the panel as it banks.
+        if (car.driftBankedTimer > 0f) {
+            float fade = Math.min(1f, car.driftBankedTimer / 0.6f);
+            PixelFont.drawCentered(g, "+" + Math.round(car.driftBanked), cx,
+                    y + h + 1.6f * u, 1.0f * u, ACCENT[0], ACCENT[1], ACCENT[2], fade * a);
+        }
     }
 
     // --------------------------------------------------------------- minimap

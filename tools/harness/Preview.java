@@ -163,15 +163,17 @@ public class Preview {
     static void garage(File dir) throws Exception {
         lighting(0.42f);
         clear();
-        camX = 0f; camY = 3.0f; camZ = -16f;
-        float[] vp = camera(camX, camY, camZ, 0f, 0.9f, 4f);
+        camX = 0f; camY = 3.4f; camZ = -16.5f;
+        float[] vp = camera(camX, camY, camZ, 0f, 1.0f, 6f);
         headlights = false;
 
         float[] m = new float[16];
         for (int i = 0; i < CarSpec.GARAGE.length; i++) {
             CarSpec spec = CarSpec.GARAGE[i];
-            float gx = ((i % 3) - 1) * 6.2f;
-            float gz = (i / 3) * 8.5f;
+            // Four abreast in two rows: eight cars in three columns sat on
+            // top of each other from this camera.
+            float gx = ((i % 4) - 1.5f) * 5.6f;
+            float gz = (i / 4) * 8.2f;
             Matrix.setIdentityM(m, 0);
             Matrix.translateM(m, 0, gx, 0f, gz);
             Matrix.rotateM(m, 0, 24f, 0f, 1f, 0f);

@@ -80,12 +80,27 @@ public class HudPreview {
         Car car = Preview.lastCar;
 
         if (drifting) {
-            // Put the car sideways so the drift meter has something to show.
+            // Hold a real drift rather than just kicking the tail out, so the
+            // meter is captured with a built-up multiplier and a live angle —
+            // the state the player spends most of a slide looking at.
             Controls slide = new Controls();
-            slide.throttle = 1f;
-            slide.steer = 1f;
-            slide.handbrake = true;
-            for (int i = 0; i < 26; i++) car.update(1f / 60f, slide);
+            for (int i = 0; i < 60 * 8; i++) {
+                if (i < 27) {
+                    slide.steer = 1f;
+                    slide.handbrake = true;
+                    slide.throttle = 0.3f;
+                } else {
+                    slide.handbrake = false;
+                    slide.throttle = 1f;
+                    float lock = car.slipAngle * 1.6f;
+                    slide.steer = lock < -1f ? -1f : (lock > 1f ? 1f : lock);
+                }
+                car.update(1f / 60f, slide);
+                // Capture the frame the player spends the drift looking at:
+                // well into a held slide, with the car properly sideways.
+                if (i > 60 * 2 && Math.abs(car.slipAngle) > 0.34f
+                        && car.driftNow > 25f && car.driftMultiplier >= 2) break;
+            }
         }
 
         Traffic traffic = new Traffic();
