@@ -36,7 +36,6 @@ public class Harness {
         obstacles();
         terrainDriving();
         stability();
-        drifting();
 
         System.out.println();
         System.out.println(failures == 0
@@ -368,26 +367,23 @@ public class Harness {
         check(yawLiftOff > yawOnPower,
                 "lifting off tightens the line (" + yawLiftOff + " vs " + yawOnPower + ")");
 
-        // ---- a slide banks points once it is gathered up.
+        // ---- the handbrake is a brake: it stops the car, it does not
+        //      rearrange it.
         car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
         c.clear();
         c.throttle = 1f;
         for (int i = 0; i < 240; i++) car.update(dt, c);
-        c.steer = 1f;
-        c.handbrake = true;
-        for (int i = 0; i < 40; i++) car.update(dt, c);
-        float scoredMidSlide = car.driftNow;
-        check(scoredMidSlide > 0f, "sliding scores drift points (" + scoredMidSlide + ")");
-
-        // Gathering it up banks the run; the live counter goes back to zero.
-        c.steer = 0f;
-        c.handbrake = false;
+        float rolling = car.forwardSpeed;
         c.throttle = 0f;
-        for (int i = 0; i < 200; i++) car.update(dt, c);
-        check(car.driftNow == 0f, "the live drift counter resets after the slide");
-        check(car.driftTotal >= scoredMidSlide, "a finished slide banks its points ("
-                + car.driftTotal + ")");
-        check(car.driftBest >= scoredMidSlide, "the best single slide is remembered");
+        c.handbrake = true;
+        float peakYank = 0f;
+        for (int i = 0; i < 120; i++) {
+            car.update(dt, c);
+            peakYank = Math.max(peakYank, Math.abs(car.slipAngle));
+        }
+        check(car.forwardSpeed < rolling * 0.5f, "the handbrake slows the car down");
+        check(peakYank < 0.12f, "and does not throw it sideways ("
+                + round1(deg(peakYank)) + " degrees)");
 
         // ---- 0-100 km/h, which is the number that says whether the gearbox
         //      and the traction limit add up to a car or to a toy.
@@ -552,9 +548,8 @@ public class Harness {
 
     /**
      * Ordinary driving. Every car, every speed, every amount of steering: the
-     * car goes round the corner. Nothing here is about drifting — it is about
-     * the other ninety per cent of the time, and its absence is how a garage
-     * of cars that spun at any speed on a quarter of a turn got shipped.
+     * car goes round the corner. The absence of this suite is how a garage of
+     * cars that spun at any speed, on a quarter of a turn, got shipped.
      */
     static void stability() {
         System.out.println("[stability]");
@@ -614,12 +609,12 @@ public class Harness {
             car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
             c.throttle = 1f;
             float startYaw = car.yaw;
-            float drift = 0f;
+            float wander = 0f;
             for (int i = 0; i < 60 * 12; i++) {
                 car.update(1f / 60f, c);
-                drift = Math.max(drift, Math.abs(car.yaw - startYaw));
+                wander = Math.max(wander, Math.abs(car.yaw - startYaw));
             }
-            check(drift < 0.02f, spec.name + " tracks straight under full power");
+            check(wander < 0.02f, spec.name + " tracks straight under full power");
         }
 
         // Lifting off mid-corner tightens the line; it must not swap ends.
@@ -637,10 +632,7 @@ public class Harness {
                 car.update(1f / 60f, c);
                 peak = Math.max(peak, Math.abs(car.slipAngle));
             }
-            // A loose car is allowed to rotate on a lift — that is what makes
-            // it a loose car — but not to let go of the corner altogether.
-            float allowed = 0.40f + 0.25f * spec.looseness;
-            check(peak < allowed, spec.name + " survives a lift mid-corner ("
+            check(peak < 0.25f, spec.name + " survives a lift mid-corner ("
                     + round1(deg(peak)) + " degrees)");
         }
 
@@ -662,284 +654,8 @@ public class Harness {
                 + round1(deg(slowLock)) + " down to " + round1(deg(fastLock)) + " degrees)");
     }
 
-    /**
-     * The drift model. Drifting here is something a player chooses: the
-     * handbrake starts it, the throttle keeps it alive, opposite lock steers
-     * it. None of it happens to a car that is merely being driven — that is
-     * what [stability] is for, and the two suites are the two halves of the
-     * same claim.
-     */
-    static void drifting() {
-        System.out.println("[drifting]");
-        CarSpec drifter = CarSpec.GARAGE[0];
-        CarSpec sedan = CarSpec.GARAGE[4];
-        check(drifter.looseness > sedan.looseness * 2f, "the drift car is the loose one");
-
-        // The handbrake is the way in, and it has to be worth pulling.
-        float dry = slide(drifter, 24f, 0, 0.8f, 1f);
-        float yanked = slide(drifter, 24f, 40, 0.8f, 1f);
-        check(yanked > 0.45f, "the handbrake puts the car properly sideways ("
-                + round1(deg(yanked)) + " degrees)");
-        check(yanked > dry * 3f, "and nothing else does (" + round1(deg(dry))
-                + " degrees without it)");
-
-        // The same pull in a planted car is a tidy slide, not a drift.
-        float planted = slide(sedan, 24f, 40, 0.8f, 1f);
-        check(yanked > planted * 1.5f,
-                "a loose car goes further on the same pull (" + round1(deg(yanked))
-                        + " vs " + round1(deg(planted)) + " degrees)");
-
-        // Once sideways, the throttle is what carries the car through. Lifting
-        // leaves it scrubbing off speed, which is the slow way out of a drift.
-        float onPower = heldFor(drifter, 1f);
-        float lifted = heldFor(drifter, 0.05f);
-        check(onPower > lifted * 1.3f,
-                "the throttle carries the drift and lifting kills it (" + round1(onPower)
-                        + " vs " + round1(lifted) + " m/s out)");
-
-        // Opposite lock steers it; the wrong lock does not.
-        float caught = catchSlide(true);
-        float dropped = catchSlide(false);
-        check(caught < 1.2f, "steering into the slide gathers it up in "
-                + round1(caught) + "s");
-        check(dropped > caught * 1.8f, "and steering the wrong way does not ("
-                + round1(dropped) + "s)");
-
-        // A held drift keeps its speed. A slide that scrubs the car to a halt
-        // is a crash with extra steps.
-        Car car = new Car();
-        Controls c = new Controls();
-        float entry = 24f;
-        float held = holdDrift(car, c, entry, 60 * 5);
-        check(held > 0.26f, "linked drifts keep the car sideways ("
-                + round1(deg(held)) + " degrees on average across the run)");
-        // Sampled while the car is still on the road: a drift that wanders
-        // onto the grass bogs down for reasons that have nothing to do with
-        // the drift model, and measuring there would test the scenery.
-        check(driftSpeed > entry * 0.85f, "and carries its speed through ("
-                + round1(driftSpeed) + " of " + round1(entry) + " m/s)");
-
-        check(car.driftMultiplier >= 2, "holding it builds the multiplier (x"
-                + car.driftMultiplier + ")");
-        check(car.driftNow > 0f, "and scores while it is held");
-
-        c.steer = 0f;
-        c.throttle = 0f;
-        c.handbrake = false;
-        for (int i = 0; i < 60 * 4; i++) car.update(1f / 60f, c);
-        check(car.driftBanked > 0f && car.driftNow == 0f, "straightening banks the run");
-        check(car.driftMultiplier == 1, "and resets the multiplier");
-        check(car.driftBest > 0f, "the best run is remembered");
-
-        // Yaw is a state with inertia: letting go of the wheel does not stop
-        // the rotation dead.
-        car.reset(drifter, -Terrain.LANE_OFFSET, 0f, 0f);
-        car.vz = 26f;
-        c.throttle = 0.6f;
-        c.steer = 0.8f;
-        for (int i = 0; i < 40; i++) car.update(1f / 60f, c);
-        float spinning = Math.abs(car.yawRate);
-        c.steer = 0f;
-        c.throttle = 0f;
-        car.update(1f / 60f, c);
-        check(spinning > 0.25f, "the car builds a real yaw rate (" + round1(spinning) + " rad/s)");
-        check(Math.abs(car.yawRate) > spinning * 0.6f,
-                "and carries it after the steering is released");
-
-        // The rear lets go faster than it comes back, which is what gives a
-        // slide its own momentum instead of snapping straight on release.
-        car.reset(drifter, -Terrain.LANE_OFFSET, 0f, 0f);
-        car.vz = 24f;
-        c.steer = 0.8f;
-        c.throttle = 0.3f;
-        c.handbrake = true;
-        for (int i = 0; i < 40; i++) car.update(1f / 60f, c);
-        float letGo = car.rearSlide;
-        c.handbrake = false;
-        c.throttle = 0f;
-        c.steer = 0f;
-        for (int i = 0; i < 12; i++) car.update(1f / 60f, c);
-        check(letGo > 0.8f, "the handbrake lets the rear go (" + round1(letGo) + ")");
-        check(car.rearSlide > letGo * 0.55f, "and it does not come back instantly");
-
-        // However hard it is provoked, it must never rotate faster than a
-        // player can answer, and must never wind itself up without limit.
-        car.reset(drifter, -Terrain.LANE_OFFSET, 0f, 0f);
-        car.vz = 40f;
-        c.throttle = 1f;
-        c.steer = 1f;
-        c.handbrake = true;
-        float worstYaw = 0f;
-        for (int i = 0; i < 60 * 6; i++) {
-            car.update(1f / 60f, c);
-            worstYaw = Math.max(worstYaw, Math.abs(car.yawRate));
-            check2(!Float.isNaN(car.x) && !Float.isNaN(car.slipAngle), "the solver stays finite");
-        }
-        check(worstYaw < 2.6f, "the spin stays answerable (" + round1(worstYaw) + " rad/s)");
-
-        // The bug this replaced: fully sideways, the car saw no speed at all,
-        // so nothing slowed it and it slid on for ever.
-        car.reset(drifter, -Terrain.LANE_OFFSET, 0f, 0f);
-        car.vx = 22f;           // travelling due east while pointing due north
-        car.vz = 0f;
-        c.throttle = 0f;
-        c.steer = 0f;
-        c.handbrake = false;
-        for (int i = 0; i < 60 * 5; i++) car.update(1f / 60f, c);
-        check((float) Math.hypot(car.vx, car.vz) < 6f,
-                "a sideways car is slowed by its tyres ("
-                        + round1((float) Math.hypot(car.vx, car.vz)) + " m/s left)");
-
-        // Hitting something loses the run rather than paying out.
-        car.reset(drifter, -Terrain.LANE_OFFSET, 0f, 0f);
-        holdDrift(car, c, 24f, 180);
-        check(car.driftNow > 0f, "a slide is worth something before the crash");
-        car.loseDrift();
-        check(car.driftNow == 0f && car.driftMultiplier == 1, "and nothing after it");
-    }
-
-    /** Like check(), but silent when it passes so a loop can call it 360 times. */
-    static void check2(boolean ok, String what) {
-        if (!ok) check(false, what);
-    }
-
     static float deg(float radians) {
         return radians * 57.2958f;
-    }
-
-    /**
-     * Provokes a slide the way a player does — a stab of handbrake with some
-     * lock on — and reports the deepest angle it reaches.
-     */
-    static float slide(CarSpec spec, float entry, int handbrakeFrames, float steer,
-                       float throttle) {
-        Car car = new Car();
-        Controls c = new Controls();
-        car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
-        car.vz = entry;          // reset() faces +Z
-        c.steer = steer;
-        float peak = 0f;
-        for (int i = 0; i < 150; i++) {
-            c.handbrake = i < handbrakeFrames;
-            c.throttle = i < handbrakeFrames ? 0.25f : throttle;
-            car.update(1f / 60f, c);
-            peak = Math.max(peak, Math.abs(car.slipAngle));
-        }
-        return peak;
-    }
-
-    /**
-     * Kicks the car sideways, then holds the given throttle with opposite lock
-     * and reports the speed it comes out with.
-     */
-    static float heldFor(CarSpec spec, float throttle) {
-        Car car = new Car();
-        Controls c = new Controls();
-        float dt = 1f / 60f;
-        car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
-        car.vz = 24f;
-        c.steer = 0.9f;
-        c.throttle = 0.25f;
-        c.handbrake = true;
-        for (int i = 0; i < 40; i++) car.update(dt, c);
-
-        c.handbrake = false;
-        c.throttle = throttle;
-        for (int i = 0; i < 60 * 3; i++) {
-            c.steer = holdLock(car);
-            car.update(dt, c);
-        }
-        return (float) Math.hypot(car.vx, car.vz);
-    }
-
-    /**
-     * Provokes a slide, then either steers into it or away from it, and
-     * reports how long the car takes to come back straight. Measuring the
-     * angle at a fixed moment instead catches a caught slide mid-overshoot
-     * and reads it as a failure.
-     */
-    static float catchSlide(boolean into) {
-        Car car = new Car();
-        Controls c = new Controls();
-        float dt = 1f / 60f;
-        car.reset(CarSpec.GARAGE[0], -Terrain.LANE_OFFSET, 0f, 0f);
-        car.vz = 24f;
-        c.throttle = 0.25f;
-        c.steer = 0.9f;
-        c.handbrake = true;
-        for (int i = 0; i < 40; i++) car.update(dt, c);
-
-        // Which way the car is sliding decides which way is "into" it, so the
-        // test never has to assume a sign convention.
-        float lock = Math.signum(car.slipAngle) * (into ? 1f : -1f);
-        c.handbrake = false;
-        c.throttle = 0.25f;
-        c.steer = lock;
-        int frames = 60 * 3;
-        for (int i = 0; i < frames; i++) {
-            car.update(dt, c);
-            if (Math.abs(car.slipAngle) < 0.17f) return i * dt;
-        }
-        return frames * dt;      // never came back
-    }
-
-    /** Speed partway through the last holdDrift, while it was still on tarmac. */
-    static float driftSpeed;
-
-    /**
-     * Drives the way a player strings drifts together: pull the handbrake to
-     * set the car up, hold it on the throttle and opposite lock, and when it
-     * comes back straight, pull it again. Chaining pulls is what the grace
-     * window and the multiplier exist for, so that is what gets tested.
-     * Returns the average slip angle across the whole run.
-     */
-    static float holdDrift(Car car, Controls c, float entrySpeed, int frames) {
-        float dt = 1f / 60f;
-        driftSpeed = 0f;
-        car.reset(CarSpec.GARAGE[0], -Terrain.LANE_OFFSET, 0f, 0f);
-        car.vz = entrySpeed;
-        float sum = 0f;
-        int samples = 0;
-        int pull = 40;              // frames of handbrake left in this pull
-        for (int i = 0; i < frames; i++) {
-            if (pull > 0) {
-                pull--;
-                c.steer = 1f;
-                c.handbrake = true;
-                c.throttle = 0.25f;
-            } else {
-                c.handbrake = false;
-                c.throttle = 1f;
-                c.steer = holdLock(car);
-                // Back straight and still moving: set it up again.
-                if (Math.abs(car.slipAngle) < 0.15f
-                        && Math.hypot(car.vx, car.vz) > 12f) {
-                    pull = 30;
-                }
-                sum += Math.abs(car.slipAngle);
-                samples++;
-            }
-            car.update(dt, c);
-            if (i == 150) driftSpeed = (float) Math.hypot(car.vx, car.vz);
-        }
-        return samples == 0 ? 0f : sum / samples;
-    }
-
-    /**
-     * Opposite lock the way a player applies it: aimed at holding an angle,
-     * not at snapping the car straight. Chasing the slide to zero overshoots
-     * into a slide the other way, which is a fact about drifting rather than
-     * a fact about this car.
-     */
-    static float holdLock(Car car) {
-        float target = 0.44f;            // about twenty-five degrees
-        float err = Math.abs(car.slipAngle) - target;
-        float amount = clamp(0.75f + err * 2.4f, 0f, 1f);
-        return Math.signum(car.slipAngle) * amount;
-    }
-
-    static float clamp(float v, float lo, float hi) {
-        return v < lo ? lo : (v > hi ? hi : v);
     }
 
     static float round1(float v) {

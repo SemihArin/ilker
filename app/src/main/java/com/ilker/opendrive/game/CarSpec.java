@@ -6,8 +6,9 @@ package com.ilker.opendrive.game;
  * new one never needs an art asset.
  *
  * Handling is described per axle rather than as one grip number, because that
- * is what decides whether a car understeers, oversteers or holds a slide: a
- * drift car is one whose rear tyres give up long before its fronts do.
+ * is what decides whether a car understeers or oversteers — and a car whose
+ * rear axle is the weaker of the two is unstable above a critical speed, which
+ * no amount of driving recovers. {@link #balance} is that check.
  *
  * Local axes: +X right, +Y up, +Z forward. The origin sits on the road surface
  * between the wheels.
@@ -48,16 +49,9 @@ public class CarSpec {
     public final float gripRear;
     /** Share of the weight over the front axle; above 0.5 is nose-heavy. */
     public final float frontWeight;
-    /** Maximum steering angle in radians. Drift cars need far more lock. */
+    /** Maximum steering angle in radians, at parking speed. */
     public final float steerLock;
     public final float steerRate;
-    /**
-     * How readily the rear lets go when it is provoked, 0..1. This — not a
-     * weak rear axle — is what makes a car a drift car. Every car here is
-     * stable when it is simply driven; a loose one is the one whose rear
-     * gives up as soon as the throttle or the handbrake asks it to.
-     */
-    public final float looseness;
 
     public final float colorR, colorG, colorB;
 
@@ -68,7 +62,7 @@ public class CarSpec {
                     boolean spoiler, boolean pickupBed, boolean roofRack,
                     float topSpeed, float enginePower, float brakePower,
                     float gripFront, float gripRear, float frontWeight,
-                    float steerLock, float steerRate, float looseness,
+                    float steerLock, float steerRate,
                     float colorR, float colorG, float colorB) {
         this.name = name;
         this.length = length;
@@ -97,84 +91,83 @@ public class CarSpec {
         this.frontWeight = frontWeight;
         this.steerLock = steerLock;
         this.steerRate = steerRate;
-        this.looseness = looseness;
         this.colorR = colorR;
         this.colorG = colorG;
         this.colorB = colorB;
     }
 
     public static final CarSpec[] GARAGE = {
-            // Purpose-built drifter: huge lock, a rear axle that lets go early
-            // and enough power to keep it there. This is the default car.
-            new CarSpec("DUMAN DRIFT", 4.52f, 1.94f, 0.30f, 0.90f, 1.28f,
+            // Low, light and eager: the quickest thing here to change
+            // direction. This is the default car.
+            new CarSpec("ATMACA COUPE", 4.52f, 1.94f, 0.30f, 0.90f, 1.28f,
                     0.70f, 0.76f, 0.10f, -0.66f, 0.24f, -0.20f,
                     0.34f, 0.30f, 2.66f, 1.66f,
                     true, false, false,
                     64f, 3.30f, 15f,
-                    6.20f, 5.83f, 0.53f, 0.92f, 3.4f, 1.00f,
+                    6.20f, 6.39f, 0.53f, 0.92f, 3.4f,
                     0.93f, 0.28f, 0.06f),
 
-            // Light, twitchy, rotates on a thought.
+            // Short, sharp and nimble through a set of bends.
             new CarSpec("FIRTINA RS", 4.10f, 1.84f, 0.28f, 0.84f, 1.20f,
                     0.68f, 0.72f, 0.06f, -0.70f, 0.26f, -0.22f,
                     0.32f, 0.27f, 2.42f, 1.58f,
                     true, false, false,
                     69f, 3.00f, 16f,
-                    6.00f, 5.98f, 0.52f, 0.88f, 3.8f, 0.88f,
+                    6.00f, 6.44f, 0.52f, 0.88f, 3.8f,
                     0.20f, 0.62f, 0.92f),
 
-            // Long bonnet, loose back end — the classic drift machine.
+            // Long bonnet, big engine, happier on a straight than a corner.
             new CarSpec("KAS MUSCLE", 4.92f, 2.00f, 0.32f, 0.98f, 1.40f,
                     0.74f, 0.78f, -0.02f, -0.74f, 0.24f, -0.26f,
                     0.36f, 0.31f, 2.92f, 1.70f,
                     true, false, false,
                     71f, 3.10f, 14f,
-                    5.60f, 4.90f, 0.55f, 0.80f, 2.8f, 0.95f,
+                    5.60f, 5.39f, 0.55f, 0.80f, 2.8f,
                     0.10f, 0.11f, 0.14f),
 
-            // Low, wide and fast; grippy enough to be quick, loose enough to play.
+            // The fast one: most power, most grip, highest top speed.
             new CarSpec("SIMSEK GT", 4.35f, 1.92f, 0.30f, 0.86f, 1.20f,
                     0.66f, 0.74f, 0.16f, -0.62f, 0.26f, -0.18f,
                     0.33f, 0.26f, 2.58f, 1.60f,
                     true, false, false,
                     77f, 4.10f, 19f,
-                    6.60f, 7.23f, 0.51f, 0.70f, 3.0f, 0.50f,
+                    6.60f, 7.55f, 0.51f, 0.70f, 3.0f,
                     0.86f, 0.13f, 0.14f),
 
-            // The sensible one: it would rather push wide than swap ends.
+            // The sensible one. Nothing it does will surprise you.
             new CarSpec("KLASIK SEDAN", 4.62f, 1.86f, 0.34f, 1.00f, 1.48f,
                     0.74f, 0.78f, 0.20f, -0.66f, 0.22f, -0.10f,
                     0.34f, 0.25f, 2.72f, 1.58f,
                     false, false, false,
                     60f, 2.20f, 15f,
-                    5.40f, 4.97f, 0.57f, 0.62f, 2.6f, 0.30f,
+                    5.40f, 4.97f, 0.57f, 0.62f, 2.6f,
                     0.24f, 0.55f, 0.36f),
 
-            // Tall, planted, unbothered by kerbs and slow to rotate.
+            // Tall, planted, unbothered by kerbs and slow to turn in.
             new CarSpec("KARTAL SUV", 4.72f, 1.98f, 0.44f, 1.30f, 1.86f,
                     0.80f, 0.86f, 0.30f, -0.70f, 0.16f, -0.05f,
                     0.40f, 0.30f, 2.82f, 1.66f,
                     false, false, true,
                     58f, 2.00f, 15f,
-                    4.90f, 4.85f, 0.56f, 0.60f, 2.3f, 0.25f,
+                    4.90f, 4.87f, 0.56f, 0.60f, 2.3f,
                     0.16f, 0.32f, 0.52f),
 
-            // Short wheelbase, flicks through junctions, noses wide on power.
+            // Slow, but short enough to be the most agile thing at a junction.
             new CarSpec("MINIK HATCH", 3.72f, 1.72f, 0.36f, 1.02f, 1.52f,
                     0.78f, 0.80f, 0.26f, -0.80f, 0.20f, -0.12f,
                     0.31f, 0.22f, 2.35f, 1.48f,
                     false, false, false,
                     47f, 1.90f, 14f,
-                    5.30f, 4.41f, 0.61f, 0.66f, 3.2f, 0.28f,
+                    5.30f, 4.40f, 0.61f, 0.66f, 3.2f,
                     0.96f, 0.72f, 0.10f),
 
-            // Open bed, heavy, a loose rear that is more nuisance than fun.
+            // Open bed, heavy, steady. Happy on dirt.
             new CarSpec("YUK PICKUP", 5.25f, 2.02f, 0.46f, 1.22f, 1.82f,
                     0.82f, 0.94f, 0.06f, -0.52f, 0.18f, -0.04f,
                     0.40f, 0.32f, 3.15f, 1.70f,
                     false, true, false,
                     51f, 1.75f, 13f,
-                    4.80f, 4.10f, 0.58f, 0.58f, 2.1f, 0.55f,
+                    4.80f, 4.24f, 0.58f, 0.58f, 2.1f,
                     0.90f, 0.90f, 0.88f),
     };
 

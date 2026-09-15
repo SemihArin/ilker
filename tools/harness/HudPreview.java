@@ -22,7 +22,6 @@ public class HudPreview {
         frame(dir, "hud-day.png", 0.40f, Preview.cityChunk(), 0, false);
         frame(dir, "hud-night.png", 0.92f, Preview.cityChunk(), 3, true);
         frame(dir, "hud-country.png", 0.32f, Preview.ruralChunk(), 1, false);
-        frame(dir, "hud-drift.png", 0.45f, Preview.cityChunk(), 0, true, true);
         bare(dir, "hud-bare.png");
         // A squarer screen, where the controls leave no room along the bottom.
         Preview.resize(720, 540);
@@ -43,9 +42,6 @@ public class HudPreview {
         car.reset(CarSpec.GARAGE[0], -Terrain.LANE_OFFSET, 0f, 0f);
         c.throttle = 1f;
         for (int i = 0; i < 240; i++) car.update(1f / 60f, c);
-        c.steer = 1f;
-        c.handbrake = true;
-        for (int i = 0; i < 30; i++) car.update(1f / 60f, c);
 
         Traffic traffic = new Traffic();
         for (int i = 0; i < 300; i++) traffic.update(1f / 60f, car);
@@ -64,50 +60,14 @@ public class HudPreview {
         hud.draw(g, car, traffic, 2, true, 0.45f, 60, "KISA FAR", 1f);
         rasterise(g);
         Preview.write(dir, name);
-        System.out.printf("  %-18s %d hud triangles, drift=%.0f%n",
-                name, triangles(g), car.driftNow);
+        System.out.printf("  %-18s %d hud triangles%n", name, triangles(g));
     }
 
     static void frame(File dir, String name, float timeOfDay, int[] chunk,
                       int specIndex, boolean pressed) throws Exception {
-        frame(dir, name, timeOfDay, chunk, specIndex, pressed, false);
-    }
-
-    static void frame(File dir, String name, float timeOfDay, int[] chunk,
-                      int specIndex, boolean pressed, boolean drifting) throws Exception {
         Preview.lighting(timeOfDay);
         Preview.scene(chunk, specIndex);
         Car car = Preview.lastCar;
-
-        if (drifting) {
-            // Play it the way the game is played: pull the handbrake, hold it
-            // on the throttle and opposite lock, pull again when it comes back
-            // straight. Captured mid-slide with the multiplier up, which is
-            // the state the player spends a drift looking at.
-            Controls slide = new Controls();
-            int pull = 40;
-            for (int i = 0; i < 60 * 12; i++) {
-                if (pull > 0) {
-                    pull--;
-                    slide.steer = 1f;
-                    slide.handbrake = true;
-                    slide.throttle = 0.25f;
-                } else {
-                    slide.handbrake = false;
-                    slide.throttle = 1f;
-                    float err = Math.abs(car.slipAngle) - 0.44f;
-                    float amount = Math.max(0f, Math.min(1f, 0.75f + err * 2.4f));
-                    slide.steer = Math.signum(car.slipAngle) * amount;
-                    if (Math.abs(car.slipAngle) < 0.15f
-                            && Math.hypot(car.vx, car.vz) > 12f) {
-                        pull = 30;
-                    }
-                }
-                car.update(1f / 60f, slide);
-                if (Math.abs(car.slipAngle) > 0.38f && car.driftNow > 25f
-                        && car.driftMultiplier >= 2) break;
-            }
-        }
 
         Traffic traffic = new Traffic();
         Controls c = new Controls();
@@ -127,8 +87,8 @@ public class HudPreview {
             hud.processInput(new float[0], new float[0], 0, c, 0f, false);
         }
 
-        // The drift meter and the steering readout ease in over about a
-        // second, so run the interface for a moment before capturing a frame.
+        // The steering readout eases in over about a second, so run the
+        // interface for a moment before capturing a frame.
         int mode = timeOfDay > 0.8f ? 2 : 0;
         for (int warm = 0; warm < 45; warm++) {
             g.begin();
