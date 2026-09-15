@@ -72,6 +72,15 @@ public class Car {
     /** Steering actually at the wheels, including the counter-steer help. */
     public float effectiveSteer;
     /** 0..1, how much the driven wheels are spinning up. */
+    /**
+     * How far the rear tyres have let go, 0..1. It climbs while they are being
+     * provoked — handbrake, wheelspin, or the last of the traction budget
+     * spent on drive — and takes a moment to come back. That lag is what gives
+     * a slide a life of its own instead of snapping straight the instant the
+     * handbrake is released, and it is the state a drift is really held in.
+     */
+    public float rearSlide;
+
     public float wheelspin;
     /** 0..1, how much the brakes have the wheels locked. */
     public float lockup;
@@ -136,6 +145,7 @@ public class Car {
         bodyVelY = 0f;
         velY = 0f;
         airborne = false;
+        rearSlide = 0f;
         airTime = 0f;
         landing = 0f;
         vx = 0f;
@@ -215,10 +225,19 @@ public class Car {
         float slopePitch = (float) Math.atan2(ahead - behind, spec.wheelbase);   // + = nose up
         float slopeRoll = (float) Math.atan2(rightH - leftH, spec.track);        // + = right side up
 
-        // ---- steering. Plenty of lock is kept at speed: a drift is held on
-        //      opposite lock, and a car that runs out of it just spins.
-        float speedFrac = Math.min(1f, absV / (spec.topSpeed * 0.62f));
-        float maxSteer = spec.steerLock * (1f - 0.30f * speedFrac);
+        // ---- steering. The lock that makes a car park is far more than it
+        //      can survive at speed: at 120 km/h a real driver uses two or
+        //      three degrees, and handing the player thirty is a spin every
+        //      time the thumb moves. So the available lock falls away with
+        //      speed — which is what makes the car feel planted.
+        float speedFactor = 0.10f + 0.90f / (1f + absV / 4.5f);
+
+        // A car already sliding needs that lock back, because that is exactly
+        // what counter-steering is. Opposite lock is earned by the slide
+        // rather than always on offer.
+        float slideFactor = 0.85f * Math.min(1f, Math.abs(slipAngle) / 0.5f);
+
+        float maxSteer = spec.steerLock * Math.max(speedFactor, slideFactor);
         float targetSteer = c.steer * maxSteer;
 
         // Correcting a slide has to be quicker than provoking one, and a thumb
@@ -241,6 +260,12 @@ public class Car {
         // Resistance has to fade out as the car stops, or it acts as static
         // friction and a parked car sits on a hill instead of rolling down it.
         float creep = Math.min(1f, absV / 1.5f);
+        // What the rear tyres can put down lengthways. The lateral solver needs
+        // the same number, so it is worked out here rather than guessed at.
+        float traction = 8f;
+        // Braking effort kept apart from the rest of the resistance, because
+        // load transfer follows the pedals, not the air.
+        float brakeAccel = 0f;
         float resist = aeroDrag() * speedRatio * speedRatio
                 + ROLLING * (0.15f + 0.85f * creep)
                 + (1f - surface) * 7f * creep;
@@ -277,19 +302,19 @@ public class Car {
             // which is where wheelspin comes from.
             wheelspin = 0f;
             float pull = Math.abs(drive);
-            if (pull > 0f) {
+            {
                 // What the tyres can take. Low enough that a powerful car in
                 // first gear overwhelms them and a small hatchback does not.
-                float traction = ((1.6f + 4.0f * surface) + 5.0f * surface * Math.min(1f, absV / 18f))
-                        * (spec.gripRear / 4.6f);
+                traction = (1.9f + 3.9f * surface) + 4.6f * surface * Math.min(1f, absV / 18f);
                 // A tyre already sliding sideways has far less left to put the
                 // power down with. This closes the loop that makes a drift
                 // something you hold on the throttle rather than something
                 // that happens to you: sliding spins the rear up, spinning
                 // rear keeps it sliding, and lifting ends it.
-                traction *= 1f - 0.55f * Math.min(1f, Math.abs(slipAngle) / 0.55f);
+                traction *= 1f - 0.55f * spec.looseness
+                        * Math.min(1f, Math.abs(slipAngle) / 0.55f);
                 if (c.handbrake) traction *= 0.35f;
-                if (pull > traction) {
+                if (pull > traction && pull > 0f) {
                     wheelspin = Math.min(1f, (pull - traction) / pull);
                     float capped = traction + (pull - traction) * 0.15f;
                     drive = Math.signum(drive) * capped;
@@ -306,6 +331,7 @@ public class Car {
                         demand = maxBrake + (demand - maxBrake) * 0.25f;
                     }
                     resist += demand;
+                    brakeAccel = demand;
                     drive = 0f;
                 } else {
                     // Stopped with the brake still down: select reverse.
@@ -359,18 +385,51 @@ public class Car {
         float axleRear = spec.wheelbase * spec.frontWeight;
         float izz = spec.wheelbase * spec.wheelbase * 0.30f;
 
-        float loadShift = clamp(longAccel / 8f, -1f, 1f);
-        float gripF = spec.gripFront * surface * (1f - 0.24f * loadShift);
-        float gripR = spec.gripRear * surface * (1f + 0.24f * loadShift);
+        // Weight moves because the driver asked it to. Deriving this from net
+        // acceleration instead makes aerodynamic drag alone pitch the car onto
+        // its nose at motorway speed, unloading the rear until the mildest
+        // steering input spins it — which is not a corner anyone can take.
+        float loadShift = clamp((drive - brakeAccel) / 8f, -1f, 1f);
+        float gripF = spec.gripFront * surface * (1f - 0.18f * loadShift);
+        float gripR = spec.gripRear * surface * (1f + 0.18f * loadShift);
 
         // Friction circle: whatever the rear axle spends driving, it cannot
         // spend gripping. This is where power oversteer comes from.
-        float longShare = Math.min(1f, Math.abs(drive) / Math.max(0.5f, spec.gripRear * surface));
-        gripR *= (float) Math.sqrt(Math.max(0.06f, 1f - longShare * longShare));
-        // Spinning tyres have almost nothing left sideways. This is the lever
-        // the player actually holds a drift with: the throttle.
-        gripR *= 1f - 0.55f * wheelspin;
-        if (c.handbrake) gripR *= 0.15f;
+        // Friction circle. Only the top of the traction budget starts stealing
+        // from the sides: taking a corner on part throttle is not a drift, and
+        // a car that treats it as one is simply undriveable.
+        float longShare = Math.min(1f, Math.abs(drive) / Math.max(1f, traction));
+        float circle = (float) Math.sqrt(Math.max(0.15f, 1f - longShare * longShare));
+
+        // On a phone the throttle is held down almost all the time, so it
+        // cannot be what puts the car sideways — that is the handbrake's job.
+        // What the throttle does is keep a slide alive once it has started: a
+        // tyre already scrabbling sideways loses far more to the power than a
+        // planted one does. Start it, then hold it on the throttle.
+        float already = Math.min(1f, Math.abs(slipAngle) / 0.30f);
+        float bite = (1f - circle) * spec.looseness * (0.18f + 0.82f * already);
+
+        // Everything that provokes the rear feeds one number, and that number
+        // lets go quickly but comes back slowly.
+        // Spinning tyres cost some grip sideways, but only some: pulling away
+        // hard out of a junction lights the rear up, it does not swap ends.
+        // The handbrake and the friction circle are the levers meant to put
+        // the car sideways, and they are the ones a player chooses to pull.
+        float provoke = Math.max(c.handbrake ? 1f : 0f,
+                Math.max(wheelspin * 0.45f, bite));
+        if (airborne) provoke = 0f;
+        float slideRate = provoke > rearSlide ? 5.0f : 1.6f;
+        rearSlide += (provoke - rearSlide) * Math.min(1f, dt * slideRate);
+
+        gripR *= 1f - (0.55f + 0.30f * spec.looseness) * rearSlide;
+
+        // When the back is away the front is working hard too, and it never
+        // has the bite it would have on a car going where it points. Without
+        // this the front tyres kill a drift the instant the player applies
+        // opposite lock, so every slide is one swing and then straight — you
+        // can start a drift but never hold one.
+        gripF *= 1f - 0.15f * rearSlide;
+        if (c.handbrake) gripF *= 0.90f;
         if (lockup > 0f) {
             gripF *= 1f - 0.60f * lockup;
             gripR *= 1f - 0.60f * lockup;
@@ -615,7 +674,7 @@ public class Car {
             driftHeld += dt;
             float degrees = slip * 57.2958f;
             driftNow += degrees * (absV * 3.6f) * 0.016f * driftMultiplier * dt;
-            driftGrace = 0.9f;
+            driftGrace = 1.3f;
         } else if (driftGrace > 0f) {
             driftGrace -= dt;
             // Swapping from one slide to the next takes the car through
@@ -626,7 +685,7 @@ public class Car {
         } else if (driftNow > 0f) {
             bankDrift();
         }
-        driftMultiplier = Math.min(5, 1 + (int) (driftHeld / 2.0f));
+        driftMultiplier = Math.min(5, 1 + (int) (driftHeld / 1.4f));
     }
 
     private void bankDrift() {

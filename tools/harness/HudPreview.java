@@ -80,26 +80,32 @@ public class HudPreview {
         Car car = Preview.lastCar;
 
         if (drifting) {
-            // Hold a real drift rather than just kicking the tail out, so the
-            // meter is captured with a built-up multiplier and a live angle —
-            // the state the player spends most of a slide looking at.
+            // Play it the way the game is played: pull the handbrake, hold it
+            // on the throttle and opposite lock, pull again when it comes back
+            // straight. Captured mid-slide with the multiplier up, which is
+            // the state the player spends a drift looking at.
             Controls slide = new Controls();
-            for (int i = 0; i < 60 * 8; i++) {
-                if (i < 27) {
+            int pull = 40;
+            for (int i = 0; i < 60 * 12; i++) {
+                if (pull > 0) {
+                    pull--;
                     slide.steer = 1f;
                     slide.handbrake = true;
-                    slide.throttle = 0.3f;
+                    slide.throttle = 0.25f;
                 } else {
                     slide.handbrake = false;
                     slide.throttle = 1f;
-                    float lock = car.slipAngle * 1.6f;
-                    slide.steer = lock < -1f ? -1f : (lock > 1f ? 1f : lock);
+                    float err = Math.abs(car.slipAngle) - 0.44f;
+                    float amount = Math.max(0f, Math.min(1f, 0.75f + err * 2.4f));
+                    slide.steer = Math.signum(car.slipAngle) * amount;
+                    if (Math.abs(car.slipAngle) < 0.15f
+                            && Math.hypot(car.vx, car.vz) > 12f) {
+                        pull = 30;
+                    }
                 }
                 car.update(1f / 60f, slide);
-                // Capture the frame the player spends the drift looking at:
-                // well into a held slide, with the car properly sideways.
-                if (i > 60 * 2 && Math.abs(car.slipAngle) > 0.34f
-                        && car.driftNow > 25f && car.driftMultiplier >= 2) break;
+                if (Math.abs(car.slipAngle) > 0.38f && car.driftNow > 25f
+                        && car.driftMultiplier >= 2) break;
             }
         }
 

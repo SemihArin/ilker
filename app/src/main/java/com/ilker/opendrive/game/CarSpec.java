@@ -51,6 +51,13 @@ public class CarSpec {
     /** Maximum steering angle in radians. Drift cars need far more lock. */
     public final float steerLock;
     public final float steerRate;
+    /**
+     * How readily the rear lets go when it is provoked, 0..1. This — not a
+     * weak rear axle — is what makes a car a drift car. Every car here is
+     * stable when it is simply driven; a loose one is the one whose rear
+     * gives up as soon as the throttle or the handbrake asks it to.
+     */
+    public final float looseness;
 
     public final float colorR, colorG, colorB;
 
@@ -61,7 +68,7 @@ public class CarSpec {
                     boolean spoiler, boolean pickupBed, boolean roofRack,
                     float topSpeed, float enginePower, float brakePower,
                     float gripFront, float gripRear, float frontWeight,
-                    float steerLock, float steerRate,
+                    float steerLock, float steerRate, float looseness,
                     float colorR, float colorG, float colorB) {
         this.name = name;
         this.length = length;
@@ -90,6 +97,7 @@ public class CarSpec {
         this.frontWeight = frontWeight;
         this.steerLock = steerLock;
         this.steerRate = steerRate;
+        this.looseness = looseness;
         this.colorR = colorR;
         this.colorG = colorG;
         this.colorB = colorB;
@@ -103,7 +111,7 @@ public class CarSpec {
                     0.34f, 0.30f, 2.66f, 1.66f,
                     true, false, false,
                     64f, 3.30f, 15f,
-                    5.90f, 3.45f, 0.53f, 0.92f, 3.4f,
+                    6.20f, 5.83f, 0.53f, 0.92f, 3.4f, 1.00f,
                     0.93f, 0.28f, 0.06f),
 
             // Light, twitchy, rotates on a thought.
@@ -112,7 +120,7 @@ public class CarSpec {
                     0.32f, 0.27f, 2.42f, 1.58f,
                     true, false, false,
                     69f, 3.00f, 16f,
-                    5.70f, 3.70f, 0.45f, 0.88f, 3.8f,
+                    6.00f, 5.98f, 0.52f, 0.88f, 3.8f, 0.88f,
                     0.20f, 0.62f, 0.92f),
 
             // Long bonnet, loose back end — the classic drift machine.
@@ -121,7 +129,7 @@ public class CarSpec {
                     0.36f, 0.31f, 2.92f, 1.70f,
                     true, false, false,
                     71f, 3.10f, 14f,
-                    5.20f, 3.30f, 0.56f, 0.80f, 2.8f,
+                    5.60f, 4.90f, 0.55f, 0.80f, 2.8f, 0.95f,
                     0.10f, 0.11f, 0.14f),
 
             // Low, wide and fast; grippy enough to be quick, loose enough to play.
@@ -130,7 +138,7 @@ public class CarSpec {
                     0.33f, 0.26f, 2.58f, 1.60f,
                     true, false, false,
                     77f, 4.10f, 19f,
-                    6.10f, 5.30f, 0.46f, 0.70f, 3.0f,
+                    6.60f, 7.23f, 0.51f, 0.70f, 3.0f, 0.50f,
                     0.86f, 0.13f, 0.14f),
 
             // The sensible one: it would rather push wide than swap ends.
@@ -139,7 +147,7 @@ public class CarSpec {
                     0.34f, 0.25f, 2.72f, 1.58f,
                     false, false, false,
                     60f, 2.20f, 15f,
-                    5.00f, 5.20f, 0.57f, 0.62f, 2.6f,
+                    5.40f, 4.97f, 0.57f, 0.62f, 2.6f, 0.30f,
                     0.24f, 0.55f, 0.36f),
 
             // Tall, planted, unbothered by kerbs and slow to rotate.
@@ -148,7 +156,7 @@ public class CarSpec {
                     0.40f, 0.30f, 2.82f, 1.66f,
                     false, false, true,
                     58f, 2.00f, 15f,
-                    4.60f, 4.70f, 0.55f, 0.60f, 2.3f,
+                    4.90f, 4.85f, 0.56f, 0.60f, 2.3f, 0.25f,
                     0.16f, 0.32f, 0.52f),
 
             // Short wheelbase, flicks through junctions, noses wide on power.
@@ -157,7 +165,7 @@ public class CarSpec {
                     0.31f, 0.22f, 2.35f, 1.48f,
                     false, false, false,
                     47f, 1.90f, 14f,
-                    5.10f, 5.00f, 0.61f, 0.66f, 3.2f,
+                    5.30f, 4.41f, 0.61f, 0.66f, 3.2f, 0.28f,
                     0.96f, 0.72f, 0.10f),
 
             // Open bed, heavy, a loose rear that is more nuisance than fun.
@@ -166,7 +174,7 @@ public class CarSpec {
                     0.40f, 0.32f, 3.15f, 1.70f,
                     false, true, false,
                     51f, 1.75f, 13f,
-                    4.50f, 3.90f, 0.59f, 0.58f, 2.1f,
+                    4.80f, 4.10f, 0.58f, 0.58f, 2.1f, 0.55f,
                     0.90f, 0.90f, 0.88f),
     };
 
@@ -175,8 +183,12 @@ public class CarSpec {
         return Math.round(topSpeed * 3.6f);
     }
 
-    /** How eagerly this car swaps ends; above zero it oversteers. */
-    public float oversteer() {
-        return gripFront - gripRear;
+    /**
+     * Static balance. Below one the car understeers and is stable; at one it
+     * is neutral; above one it is unstable and will spin above a critical
+     * speed whatever the player does, which is never what anybody wants.
+     */
+    public float balance() {
+        return (gripFront * (1f - frontWeight) / frontWeight) / gripRear;
     }
 }

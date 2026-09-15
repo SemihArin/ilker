@@ -16,7 +16,7 @@ Bu yüzden APK sadece **98 KB**.
 
 ## Kurulum
 
-`dist/ilker-drive-1.4.apk` dosyasını telefonuna kopyala ve aç. Android
+`dist/ilker-drive-1.5.apk` dosyasını telefonuna kopyala ve aç. Android
 "bilinmeyen kaynaklardan yükleme" izni isteyecek; tarayıcına veya dosya
 yöneticine bu izni ver.
 
@@ -42,40 +42,51 @@ ortası bilerek boş bırakıldı — bakman gereken yer orası.
 
 ## Sürüş
 
-Araç **iki akslı bir lastik modeliyle** sürülüyor. Ön ve arka aksın kendi kayma
+Buradaki temel kural şu: **araç sürüldüğünde oturur, savrulduğunda savrulur.**
+Drift kazara olan bir şey değil, senin seçtiğin bir şey.
+
+Araç iki akslı bir lastik modeliyle sürülüyor. Ön ve arka aksın kendi kayma
 açısı, kendi tutuş tavanı var; dönme hızı ise direksiyonun bir fonksiyonu değil,
-kendi ataleti olan gerçek bir durum. Fark tam olarak şurada: araç dönmeye
-başladığında o dönüşü **taşır**, direksiyonu bıraksan bile devam eder — yani
-kaymayı toparlaman gerekir, kayma kendi kendine geçmez.
+kendi ataleti olan gerçek bir durum. Araç dönmeye başladığında o dönüşü
+**taşır**, direksiyonu bıraksan bile devam eder.
 
-Arka aksın tutuşu önden düşük olan araç savrulur. Drift araçlarının tanımı bu:
-`DUMAN DRIFT`'in önü 5.9, arkası 3.45 — arka önce pes eder. `KLASIK SEDAN`'ın
-iki aksı neredeyse eşit, o yüzden savrulmak yerine dışarı kaçar.
+Her aracın **dengesi** ölçülüyor: ön aksın taşıdığı ağırlığa göre tutuşu, arka
+aksınkini geçerse araç belli bir hızın üstünde ne yaparsan yap fırıl döner.
+Garajdaki sekiz aracın hepsi bu sınırın güvenli tarafında — testler bunu her
+derlemede doğruluyor.
 
-**Drifti gazla tutarsın.** Kayan bir lastiğin gücü yere basacak hâli kalmaz,
-patinaj yapan bir lastiğin de yanal tutuşu kalmaz: kayma → patinaj → daha çok
-kayma. Gazı kestiğin an döngü kapanır ve arka toparlanır. El freni de sopayı
-elinde tutar — arka aksın tutuşunu bir anda üçte birine indirir.
+**Direksiyon hıza göre kısılıyor.** Park etmeni sağlayan 53 derecelik kilit,
+120 km/s'te aracı savurmaktan başka işe yaramaz; gerçek sürücü o hızda iki üç
+derece kullanır. Ama araç **kaydığı anda o kilit geri geliyor** — ters
+direksiyon tam olarak budur. Yani kilidi savrulmanın kendisi kazanıyor.
 
-Ters direksiyona bir miktar **yardım** var; kaymanın yönünde direksiyon
-kırdığında tekerlekler senin bastığından biraz fazlasını çevirir. Telefonda
-başparmağın yolu uzun, bu yardım olmadan drift yakalanacak bir şey olmaz. Sen ne
-kadar çok kırarsan yardım o kadar azalır, yani kontrol hep sende kalır.
+**Drift nasıl yapılır:** el frenini çek, arka çıksın; sonra gazda kal ve
+kaymanın yönüne direksiyon kır. Gaz drifti *başlatmaz*, **sürdürür** — çünkü
+telefonda gaz zaten sürekli basılı, onu tetikleyici yapmak aracı sürülmez hâle
+getirirdi. Zaten kayan bir lastik gücü yere basamaz, o yüzden kayma gazla
+besleniyor; gazı kesersen döngü kapanır ve arka toparlanır.
 
-Dönme hızının bir tavanı var (2.35 rad/sn). Bu sayede en kötü savrulmada bile
-araç senin tepki veremeyeceğin hızda dönmez — tam kilit + el freni + tam gazla
-girdiğin bir savrulmayı bir saniye geç bile olsa toparlayabilirsin.
+Arkanın tutuşu **zamana yayılmış bir durum**: çabuk bırakır, yavaş toparlar. El
+frenini bıraktığın anda drift kopmuyor, bir ömrü oluyor. Ölçümde el freniyle
+girilen bir savrulma 40 dereceye çıkıyor, ters direksiyonla bir saniyenin
+altında toparlanıyor, yanlış yöne kırarsan toparlanmıyor.
 
-**Drift puanı**: açı × hız × çarpan. Çarpan kaymayı tuttukça iki saniyede bir
-büyür, x5'e kadar. Savrulmayı bir yandan öbür yana çevirdiğinde sayaç durmaz —
-çevirme işin beceri isteyen kısmı, orada zinciri kırmak yanlış olurdu. Araç
-düzeldiğinde puan hanene yazılır, bir yere çarparsan yanar.
+Dönme hızının tavanı 2.35 rad/sn — en kötü savrulmada bile araç senin tepki
+veremeyeceğin hızda dönmez.
+
+Dürüst olmak gerekirse: buradaki drift, her tahrikte gelen güçlü bir savrulma.
+On saniye kesintisiz yan giden bir Formula D aracı değil. Zinciri el frenini
+tekrar çekerek kuruyorsun, puanlama da buna göre ayarlı.
+
+**Drift puanı**: açı × hız × çarpan. Çarpan kaymayı tuttukça 1.4 saniyede bir
+büyür, x5'e kadar. Savrulmalar arasında 1.3 saniyelik bir tolerans var, yani
+arka arkaya çektiğin el frenleri tek bir seri sayılıyor. Araç düzelip beklerse
+puan hanene yazılır, bir yere çarparsan yanar.
 
 Motor **gerçek bir şanzımandan** çekiyor: bir tork eğrisi, içinde bulunduğu
-vitesin oranıyla çarpılıyor. Birinci vites lastikleri yener, altıncı zar zor
-çeker, vites değişiminde tork kesilir ve devir düşer — duyduğun vites
-değişimi aracın gerçekten yaptığı vites değişimi. Bu yüzden araçlar birbirinden
-ayırt edilebiliyor: GT 3.3 saniyede 100'e çıkarken hatchback 9.6 saniye alıyor.
+vitesin oranıyla çarpılıyor. Vites değişiminde tork kesilir ve devir düşer —
+duyduğun vites değişimi aracın gerçekten yaptığı vites değişimi. GT 3.6
+saniyede 100'e çıkarken hatchback 9.6 saniye alıyor.
 
 Gövde zemine yapışık değil: kendi dikey hızını taşıyor. **Kaldırımdan hızlı
 inersen araç havalanır**, yerçekimi geri indirir, yaylar oturur. Yerçekimi
@@ -84,44 +95,43 @@ ve el freni çekmezsen park ettiğin araç geri kaçar.
 
 Bunun yanında:
 
-- **Ağırlık transferi** — hızlanırken ön hafifler, frende arka hafifler; aynı
-  virajı gazda ve gaz kesikken almak iki ayrı viraj.
-- **Patinaj** — güçlü araçlarda dururken tam gaz lastikleri döndürür.
+- **Ağırlık transferi** — gaza ve frene göre; hava direncine göre değil. Bu ayrım
+  önemliydi: net ivmeden hesaplanınca otoyol hızında sırf hava direnci aracı
+  burnuna yatırıp arkayı hafifletiyor ve en ufak direksiyonda savuruyordu.
+- **Patinaj** — güçlü araçlarda dururken tam gaz lastikleri döndürür. Yanal
+  tutuştan bir miktar götürür, ama aracı ters çevirmez.
 - **Fren kilitlenmesi** — sert frende tekerler kilitlenir, direksiyon işlemez
   olur ve ön lastikler iz bırakır.
 - **Lastik izleri** — kayan ve patinaj yapan tekerler yola gerçekten iz bırakır.
 - **Çarpışma** — binalara, ağaçlara, kayalara ve sokak lambalarına çarpılır.
-  Burnuna gelen sıyırma darbesi aracı döndürür; telefon da titrer.
-- **Işıklar** — iki ayrı far konisi (kısa huzme aşağı, uzun huzme ileri ve
-  uzağa), fren lambası, geri vites lambası, gece yanan sokak lambası havuzları
-  ve trafikteki araçların farları.
+- **Işıklar** — iki ayrı far konisi, fren lambası, geri vites lambası, gece
+  yanan sokak lambası havuzları ve trafikteki araçların farları.
 - **Ses** — kayan lastiğin ciyaklaması, patinajda yükselen devir.
-- **Kamera** — hızda, bozuk zeminde ve sert inişlerde titrer; kaput
-  kamerasında daha çok.
+- **Kamera** — hızda, bozuk zeminde ve sert inişlerde titrer.
 - **Trafik** — önündeki araç senin için yavaşlar ve stop lambaları yanar.
 - **Geri vites** — dururken frene basınca geri vites seçilir; geri viteste
   fren pedalı gaz, gaz pedalı fren olur.
 
 ## Garaj
 
-Sekiz aracın hepsi `CarSpec.GARAGE` içindeki sayılarla tanımlı — gövde oranları,
-aks başına tutuş, ağırlık dağılımı ve direksiyon kilidi. Yeni bir araç eklemek
-için tek yapman gereken o diziye bir satır daha yazmak.
+Sekiz aracın hepsi `CarSpec.GARAGE` içindeki sayılarla tanımlı. Yeni bir araç
+eklemek için tek yapman gereken o diziye bir satır daha yazmak.
 
-`SAVRULMA` sütunu ön tutuş eksi arka tutuş: ne kadar büyükse arka o kadar erken
-bırakır. `KİLİT` maksimum direksiyon açısı — drift araçları çok daha fazlasını
-ister, çünkü ters direksiyonda o açıya ihtiyacın var.
+`DENGE` aracın kararlılığı: 1'in altında araç kararlıdır, 1'e yaklaştıkça
+çevikleşir, 1'i geçerse kurtarılamaz biçimde savrulur — o yüzden hiçbiri
+geçmiyor. `GEVŞEKLİK` ise zorlandığında arkanın ne kadar kolay çıktığı; drift
+karakterini bu belirliyor, kararsızlık değil.
 
-| Araç | 0-100 | Son hız | Savrulma | Kilit | Karakter |
+| Araç | 0-100 | Son hız | Denge | Gevşeklik | Karakter |
 |---|---|---|---|---|---|
-| DUMAN DRIFT | 5.1 sn | 230 km/s | +2.45 | 53° | Drift için yapılmış: kocaman kilit, erken bırakan arka |
-| FIRTINA RS | 4.7 sn | 248 km/s | +2.00 | 50° | Hafif, sinirli, düşünmekle döner |
-| KAS MUSCLE | 5.0 sn | 256 km/s | +1.90 | 46° | Uzun kaput, ağır kıç — klasik drift makinesi |
-| SIMSEK GT | 3.3 sn | 277 km/s | +0.80 | 40° | Hızlı olacak kadar tutuşlu, oynanacak kadar serbest |
-| KLASIK SEDAN | 6.5 sn | 216 km/s | -0.20 | 36° | Aklı başında olan: savrulmaktansa dışarı kaçar |
-| KARTAL SUV | 7.4 sn | 209 km/s | -0.10 | 34° | Yüksek, sağlam, kaldırımdan korkmaz, geç döner |
-| MINIK HATCH | 9.6 sn | 169 km/s | +0.10 | 38° | Kısa dingil, kavşaklarda çevik |
-| YUK PICKUP | 9.6 sn | 184 km/s | +0.60 | 33° | Açık kasa, ağır, arkası eğlenceden çok dert |
+| DUMAN DRIFT | 4.5 sn | 230 km/s | 0.94 | 1.00 | Drift için yapılmış: 53° kilit, el freniyle anında yan |
+| FIRTINA RS | 4.3 sn | 248 km/s | 0.93 | 0.88 | Hafif, sinirli, düşünmekle döner |
+| KAS MUSCLE | 4.2 sn | 256 km/s | 0.94 | 0.95 | Uzun kaput, ağır kıç — klasik drift makinesi |
+| SIMSEK GT | 3.6 sn | 277 km/s | 0.88 | 0.50 | Hızlı ve tutuşlu; savrulmak için zorlaman gerekir |
+| KLASIK SEDAN | 6.5 sn | 216 km/s | 0.82 | 0.30 | Aklı başında olan |
+| KARTAL SUV | 7.4 sn | 209 km/s | 0.79 | 0.25 | Yüksek, sağlam, kaldırımdan korkmaz |
+| MINIK HATCH | 9.6 sn | 169 km/s | 0.77 | 0.28 | En kararlısı; kısa dingil, kavşaklarda çevik |
+| YUK PICKUP | 9.6 sn | 184 km/s | 0.85 | 0.55 | Açık kasa, ağır, arkası biraz oynak |
 
 ## Derleme
 
@@ -161,7 +171,7 @@ dosyalarını** masaüstü JVM'de derleyip çalıştırır (`android.opengl.Matr
 yerine birebir aynı davranan bir kopya konur):
 
 ```bash
-tools/harness/run.sh            # 221 kontrol
+tools/harness/run.sh            # 251 kontrol
 tools/harness/run.sh --preview  # kontroller + docs/*.png görüntülerini yeniden üretir
 ```
 
@@ -177,27 +187,27 @@ küçültmesi, her aracın 0-100 süresinin inandırıcı bir aralıkta olması,
 park eden aracın geri kaçması ve el freninin onu tutması, kaldırımdan hızlı
 inen aracın havalanıp geri inmesi, süspansiyonun dururken oturması.
 
-**Drift testleri** modelin var olma sebebini ölçüyor: arkası erken bırakan
-aracın aynı girdiyle dengeli olandan daha çok kayması, el freninin arkayı
-attırması, gazda alınan virajın gaz kesikten daha çok savurması, kaymanın
-yönünde direksiyon kırmanın onu toparlaması (ters yöne kırmanın toparlamaması),
-tutulan bir driftin hem açısını hem hızının dörtte üçünü koruması, çarpanın
-büyüyüp araç düzelince hanene yazılması, dönmenin direksiyon bırakıldıktan
-sonra da devam etmesi, ve en kötü savrulmada bile dönme hızının cevap
+**Kararlılık testleri** en önemlisi, çünkü eksikliği gerçek bir hatayı
+gizlemişti: sekiz aracın her biri, dört ayrı hızda, dört ayrı direksiyon
+miktarında ve üç ayrı gaz konumunda — 384 kombinasyon — virajı kaymadan alıyor
+mu diye bakıyor. Ayrıca her aracın yapısal olarak kararlı olduğu (arka aksın
+taşıdığı yüke göre tutuşunun yeterli olduğu), tam gazda dümdüz gittiği, viraj
+ortasında gaz kesilince ters dönmediği ve direksiyonun hızla kısıldığı
+doğrulanıyor.
+
+Bu testler yazılmadan önce **sekiz aracın sekizi de her hızda fırıl dönüyordu**;
+0.25 direksiyon bile yetiyordu. Önceki testler yalnızca "drift aracı sedandan
+daha çok kayıyor mu" gibi göreli şeyler ölçtüğü için hepsi geçiyordu. Bir test
+takımının en tehlikeli boşluğu, hiç sorulmamış olan sorudur.
+
+**Drift testleri** modelin var olma sebebini ölçüyor: el freninin aracı gerçekten
+yan yatırması ve başka hiçbir şeyin yatırmaması, gevşek aracın aynı çekişte
+kararlı olandan daha ileri gitmesi, gazın drifti taşıyıp gaz kesmenin onu
+öldürmesi, kaymanın yönüne kırmanın bir saniyenin altında toparlaması ve yanlış
+yöne kırmanın toparlamaması, arka tutuşun çabuk bırakıp yavaş toparlaması,
+zincirlenen driftlerin çarpanı büyütmesi, dönmenin direksiyon bırakıldıktan
+sonra da devam etmesi ve en kötü savrulmada bile dönme hızının cevap
 verilebilir kalması.
-
-Bunlardan biri gerçek bir hatayı ortaya çıkardı: model "hız" derken aracın
-burnu yönündeki hızı kullanıyordu. Araç tam yana geldiğinde o sayı sıfırlanıyor,
-dolayısıyla hava direnci de yuvarlanma direnci de lastik kuvveti de sıfırlanıyor
-ve araç buz üstünde gibi sonsuza kadar yan kayıyordu. Artık her şey aracın
-gerçek yer hızını görüyor; test de tam yana dönmüş bir aracın lastikleri
-tarafından yavaşladığını doğruluyor.
-
-Ayrıca **direksiyonun doğru yöne çevirmesi**: aracın gittiği yön, "sağ"ın
-tanımından (ileri × yukarı çapraz çarpımı) bağımsız olarak, üç farklı başlangıç
-açısında ve iki yönde de doğrulanıyor. Bu testin ilk hâli benim yanlış
-varsayımımı tekrarladığı için hatayı yakalayamamıştı; şimdi kodun iç
-işaret kuralına değil, geometrinin tanımına bakıyor.
 
 **Arayüz testi** ise tek bir parmağı beş farklı ekran oranında (16:9'dan 5:4'e)
 ekranın her yerinde gezdirip hiçbir noktanın aynı anda iki kontrolü birden
