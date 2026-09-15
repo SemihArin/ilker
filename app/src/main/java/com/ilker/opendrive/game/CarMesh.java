@@ -114,15 +114,16 @@ public final class CarMesh {
             mb.box(0f, floorY + wallH * 0.5f, bedRear, bw * 2f, wallH, 0.09f, r, g, b, 0f);
         }
 
-        // --- lights
-        float lightY = spec.beltY - Math.min(0.22f, (spec.beltY - spec.sillY) * 0.35f);
+        // --- lamp housings. The lit lenses live in separate meshes so the
+        //     brake lights can come on without rebuilding the whole car.
+        float lightY = lampHeight(spec);
         for (int s = -1; s <= 1; s += 2) {
             mb.box(s * hw * spec.noseNarrow * 0.62f, lightY, hl * 0.965f,
                     hw * spec.noseNarrow * 0.52f, 0.15f, 0.10f,
-                    1f, 0.96f, 0.84f, 1f);
+                    0.60f, 0.62f, 0.65f, 0f);
             mb.box(s * hw * spec.tailNarrow * 0.64f, lightY + 0.04f, -hl * 0.965f,
                     hw * spec.tailNarrow * 0.50f, 0.13f, 0.09f,
-                    0.92f, 0.10f, 0.10f, 0.85f);
+                    0.33f, 0.08f, 0.08f, 0f);
         }
 
         // --- grille and bumpers
@@ -152,6 +153,55 @@ public final class CarMesh {
                     wingY, wingY + 0.07f, r * 0.85f, g * 0.85f, b * 0.85f, 0f);
         }
 
+        return mb;
+    }
+
+    private static float lampHeight(CarSpec spec) {
+        return spec.beltY - Math.min(0.22f, (spec.beltY - spec.sillY) * 0.35f);
+    }
+
+    public static final int LAMP_HEAD = 0;
+    public static final int LAMP_TAIL = 1;
+    public static final int LAMP_BRAKE = 2;
+    public static final int LAMP_REVERSE = 3;
+    public static final int LAMP_KINDS = 4;
+
+    /**
+     * A lit lens, sitting a couple of centimetres proud of its housing so it
+     * reads as glowing rather than fighting with it for the same pixels.
+     */
+    public static MeshBuilder buildLamp(CarSpec spec, int kind) {
+        MeshBuilder mb = new MeshBuilder();
+        float hw = spec.width * 0.5f;
+        float hl = spec.length * 0.5f;
+        float y = lampHeight(spec);
+        float front = hl * 0.965f + 0.035f;
+        float rear = -hl * 0.965f - 0.035f;
+
+        for (int s = -1; s <= 1; s += 2) {
+            switch (kind) {
+                case LAMP_HEAD:
+                    mb.box(s * hw * spec.noseNarrow * 0.62f, y, front,
+                            hw * spec.noseNarrow * 0.54f, 0.17f, 0.08f,
+                            1f, 0.97f, 0.86f, 1f);
+                    break;
+                case LAMP_TAIL:
+                    mb.box(s * hw * spec.tailNarrow * 0.64f, y + 0.04f, rear,
+                            hw * spec.tailNarrow * 0.52f, 0.15f, 0.08f,
+                            0.62f, 0.05f, 0.04f, 1f);
+                    break;
+                case LAMP_BRAKE:
+                    mb.box(s * hw * spec.tailNarrow * 0.64f, y + 0.04f, rear,
+                            hw * spec.tailNarrow * 0.58f, 0.19f, 0.09f,
+                            1f, 0.09f, 0.05f, 1f);
+                    break;
+                default:
+                    mb.box(s * hw * spec.tailNarrow * 0.26f, y - 0.06f, rear,
+                            hw * spec.tailNarrow * 0.20f, 0.11f, 0.08f,
+                            1f, 1f, 0.94f, 1f);
+                    break;
+            }
+        }
         return mb;
     }
 

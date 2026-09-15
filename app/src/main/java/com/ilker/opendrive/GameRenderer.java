@@ -1,20 +1,27 @@
 package com.ilker.opendrive;
 
+import android.content.Context;
+import android.os.Build;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.opengl.Matrix;
 
 import com.ilker.opendrive.audio.EngineSound;
 import com.ilker.opendrive.game.Car;
+import com.ilker.opendrive.game.CarMesh;
 import com.ilker.opendrive.game.CarModels;
 import com.ilker.opendrive.game.CarSpec;
 import com.ilker.opendrive.game.Controls;
+import com.ilker.opendrive.game.SkidMarks;
 import com.ilker.opendrive.game.Traffic;
 import com.ilker.opendrive.gl.Frustum;
 import com.ilker.opendrive.gl.HudProgram;
 import com.ilker.opendrive.gl.Mesh;
 import com.ilker.opendrive.gl.SceneProgram;
 import com.ilker.opendrive.ui.Hud;
+import com.ilker.opendrive.world.Obstacles;
 import com.ilker.opendrive.world.Terrain;
 import com.ilker.opendrive.world.World;
 
@@ -36,6 +43,8 @@ public class GameRenderer implements GLSurfaceView.Renderer {
 
     private volatile World world; // created on the GL thread, released from the UI thread
     private Traffic traffic;
+    private final Obstacles obstacles = new Obstacles();
+    private final SkidMarks skid = new SkidMarks();
     private CarModels carModels;
     private final Car car = new Car();
     private final Controls controls = new Controls();
@@ -61,7 +70,10 @@ public class GameRenderer implements GLSurfaceView.Renderer {
     private int cameraMode;
 
     private int specIndex;
-    private boolean manualLights;
+    private int lightMode;       // 0 auto, 1 dipped, 2 main, 3 off
+    private float camShake;
+    private float shakeTime;
+    private final Vibrator vibrator;
     private boolean tiltEnabled;
     private float timeOfDay = 0.34f;
     private float nightFactor;
@@ -82,6 +94,20 @@ public class GameRenderer implements GLSurfaceView.Renderer {
     private int touchCount;
     private final float[] localTouchX = new float[MAX_POINTERS];
     private final float[] localTouchY = new float[MAX_POINTERS];
+
+    private static final String[] LIGHT_LABEL = {
+            "FARLAR OTOMATIK", "KISA FAR", "UZUN FAR", "FARLAR KAPALI"};
+
+    public GameRenderer(Context context) {
+        Vibrator v = null;
+        try {
+            v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            if (v != null && !v.hasVibrator()) v = null;
+        } catch (Throwable ignored) {
+            // A device without a motor is not a reason to fail to start.
+        }
+        vibrator = v;
+    }
 
     private volatile float tiltSteer;
     private volatile float tiltNeutral;
@@ -129,7 +155,23 @@ public class GameRenderer implements GLSurfaceView.Renderer {
 
     public void release() {
         engine.stop();
-        if (world != null) world.shutdown();
+        World w = world;
+        if (w != null) w.shutdown();
+    }
+
+    /** A short buzz proportional to how hard the car hit something. */
+    private void thump(float speed) {
+        if (vibrator == null || speed < 1.5f) return;
+        int ms = (int) Math.min(90f, 18f + speed * 4f);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                int amplitude = (int) Math.min(255f, 90f + speed * 9f);
+                vibrator.vibrate(VibrationEffect.createOneShot(ms, amplitude));
+            } else {
+                vibrator.vibrate(ms);
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     // ------------------------------------------------------------- lifecycle
@@ -151,6 +193,8 @@ public class GameRenderer implements GLSurfaceView.Renderer {
         carModels.create();
         traffic = new Traffic();
         traffic.reset();
+        skid.dispose();
+        skid.create();
 
         // Start in the right-hand lane of the road running along the Z axis.
         car.reset(CarSpec.GARAGE[specIndex], -Terrain.LANE_OFFSET, 18f, 0f);
@@ -217,6 +261,10 @@ public class GameRenderer implements GLSurfaceView.Renderer {
         handleButtons();
 
         car.update(dt, controls);
+        obstacles.refresh(car.x, car.z);
+        float bump = car.resolveObstacles(obstacles);
+        if (bump > 1.5f) thump(bump);
+        skid.follow(car);
         traffic.update(dt, car);
         world.update(car.x, car.z);
 
@@ -234,8 +282,17 @@ public class GameRenderer implements GLSurfaceView.Renderer {
         if (speedRatio < 0.02f) {
             revs = 0.10f + controls.throttle * 0.55f;
         }
+        if (car.wheelspin > 0.2f) {
+            // Spinning wheels rev past whatever the road speed suggests.
+            revs = Math.min(1f, revs + car.wheelspin * 0.45f);
+        }
         float load = Math.max(controls.throttle, Math.min(1f, Math.abs(car.forwardSpeed) / 14f));
+        float squeal = Math.max(car.wheelspin,
+                Math.max(car.lockup * 0.9f,
+                        Math.min(1f, Math.max(0f, Math.abs(car.slipAngle) - 0.14f) * 4.5f)));
+        if (Math.abs(car.forwardSpeed) < 1.5f && car.wheelspin < 0.05f) squeal = 0f;
         engine.setState(revs, load);
+        engine.setSlip(squeal);
 
         if (messageHold > 0f) {
             messageHold -= dt;
@@ -259,8 +316,8 @@ public class GameRenderer implements GLSurfaceView.Renderer {
                     + CarSpec.GARAGE[specIndex].topSpeedKmh() + " KM/S");
         }
         if (hud.wasTapped(Hud.BTN_LIGHTS)) {
-            manualLights = !manualLights;
-            showMessage(manualLights ? "FARLAR ACIK" : "FARLAR OTOMATIK");
+            lightMode = (lightMode + 1) % LIGHT_LABEL.length;
+            showMessage(LIGHT_LABEL[lightMode]);
         }
         if (hud.wasTapped(Hud.BTN_TILT)) {
             tiltEnabled = !tiltEnabled;
@@ -274,6 +331,7 @@ public class GameRenderer implements GLSurfaceView.Renderer {
             car.reset(CarSpec.GARAGE[specIndex], -Terrain.LANE_OFFSET,
                     Math.round(car.z / Terrain.CHUNK) * Terrain.CHUNK + 18f, 0f);
             camInitialised = false;
+            skid.clear();
             showMessage("YOLA GERI DONULDU");
         }
     }
@@ -327,6 +385,20 @@ public class GameRenderer implements GLSurfaceView.Renderer {
         // Never let the camera sink into a hill.
         float floor = Terrain.surfaceHeight(camX, camZ) + 0.9f;
         if (camY < floor) camY = floor;
+
+        // Speed, rough ground and impacts all shake the view a little. The
+        // bonnet camera gets more of it — it is bolted to the car, after all.
+        float rough = speedFrac * speedFrac * 0.30f
+                + (1f - Terrain.surfaceGrip(car.x, car.z)) * 0.55f * Math.min(1f, speedFrac * 2.5f)
+                + Math.min(1f, car.impact * 0.10f);
+        camShake += (rough - camShake) * Math.min(1f, dt * 9f);
+        shakeTime += dt;
+        float amount = camShake * (cameraMode == 1 ? 0.16f : 0.10f);
+        if (amount > 0.002f) {
+            camX += (float) Math.sin(shakeTime * 37.1f) * amount;
+            camY += (float) Math.sin(shakeTime * 51.7f) * amount * 1.3f;
+            camZ += (float) Math.sin(shakeTime * 43.3f) * amount;
+        }
     }
 
     // ---------------------------------------------------------------- render
@@ -356,18 +428,35 @@ public class GameRenderer implements GLSurfaceView.Renderer {
         scene.setLighting(sunDir, sunColor, ambient, fogColor, 0.0042f, nightFactor);
         scene.setCamera(camX, camY, camZ);
 
-        boolean lightsOn = manualLights || nightFactor > 0.42f;
-        float hx = car.x + car.forwardX() * (car.spec.length * 0.5f);
-        float hz = car.z + car.forwardZ() * (car.spec.length * 0.5f);
-        float hy = car.y + car.spec.beltY * 0.75f;
-        float dy = -0.14f;
+        boolean mainBeam = lightMode == 2;
+        boolean lightsOn = lightMode == 1 || mainBeam
+                || (lightMode == 0 && nightFactor > 0.42f);
+        if (mainBeam) {
+            scene.setBeam(0.80f, 0.955f, 5f, 135f, 3.4f);
+        } else {
+            scene.setBeam(0.825f, 0.968f, 5f, 70f, 3.2f);
+        }
+
+        float fwdX = car.forwardX();
+        float fwdZ = car.forwardZ();
+        float sideX = car.rightX();
+        float sideZ = car.rightZ();
+        float noseX = car.x + fwdX * (car.spec.length * 0.5f);
+        float noseZ = car.z + fwdZ * (car.spec.length * 0.5f);
+        float lampY = car.y + car.spec.beltY * 0.75f;
+        float lampOut = car.spec.width * 0.30f;
+        float dy = mainBeam ? -0.09f : -0.14f;
         float dLen = (float) Math.sqrt(1f + dy * dy);
-        scene.setHeadlights(lightsOn, hx, hy, hz,
-                car.forwardX() / dLen, dy / dLen, car.forwardZ() / dLen);
+        scene.setHeadlights(lightsOn,
+                noseX - sideX * lampOut, lampY, noseZ - sideZ * lampOut,
+                noseX + sideX * lampOut, lampY, noseZ + sideZ * lampOut,
+                fwdX / dLen, dy / dLen, fwdZ / dLen);
 
         world.draw(scene, frustum, viewProj, identity);
-        drawPlayerCar();
-        traffic.draw(scene, carModels, frustum, viewProj, mvp, camX, camZ);
+        scene.setMatrices(viewProj, identity);
+        skid.draw(scene);
+        drawPlayerCar(lightsOn);
+        traffic.draw(scene, carModels, frustum, viewProj, mvp, camX, camZ, lightsOn);
         scene.disableAttributes();
 
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0);
@@ -379,7 +468,7 @@ public class GameRenderer implements GLSurfaceView.Renderer {
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
 
         hud2d.begin();
-        hud.draw(hud2d, car, traffic, lightsOn, tiltEnabled, timeOfDay, fps, message, messageAlpha);
+        hud.draw(hud2d, car, traffic, lightMode, tiltEnabled, timeOfDay, fps, message, messageAlpha);
         hud2d.end();
     }
 
@@ -398,14 +487,27 @@ public class GameRenderer implements GLSurfaceView.Renderer {
         GLES20.glDepthMask(true);
     }
 
-    private void drawPlayerCar() {
+    private void drawPlayerCar(boolean lightsOn) {
+        float[] model = car.modelMatrix();
         Mesh body = carModels.body(specIndex, 0);
         if (body != null) {
-            float[] model = car.modelMatrix();
             Matrix.multiplyMM(mvp, 0, viewProj, 0, model, 0);
             scene.setMatrices(mvp, model);
             body.draw(scene);
         }
+
+        // Lit lenses are separate meshes, so the car can show what it is doing.
+        boolean reversing = car.forwardSpeed < -0.5f;
+        boolean braking = controls.brake > 0.5f && !reversing;
+        Matrix.multiplyMM(mvp, 0, viewProj, 0, model, 0);
+        scene.setMatrices(mvp, model);
+        if (lightsOn) drawLamp(CarMesh.LAMP_HEAD);
+        if (braking) {
+            drawLamp(CarMesh.LAMP_BRAKE);
+        } else if (lightsOn) {
+            drawLamp(CarMesh.LAMP_TAIL);
+        }
+        if (reversing) drawLamp(CarMesh.LAMP_REVERSE);
         Mesh wheel = carModels.wheel(specIndex);
         if (wheel != null) {
             for (int i = 0; i < 4; i++) {
@@ -415,6 +517,11 @@ public class GameRenderer implements GLSurfaceView.Renderer {
                 wheel.draw(scene);
             }
         }
+    }
+
+    private void drawLamp(int kind) {
+        Mesh lamp = carModels.lamp(specIndex, kind);
+        if (lamp != null) lamp.draw(scene);
     }
 
     /** Sun position, light colours and fog for the current time of day. */

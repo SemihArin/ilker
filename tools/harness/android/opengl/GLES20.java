@@ -12,6 +12,7 @@ public class GLES20 {
     public static final int GL_ARRAY_BUFFER = 0x8892;
     public static final int GL_ELEMENT_ARRAY_BUFFER = 0x8893;
     public static final int GL_STATIC_DRAW = 0x88E4;
+    public static final int GL_DYNAMIC_DRAW = 0x88E8;
     public static final int GL_TRIANGLES = 0x0004;
     public static final int GL_UNSIGNED_SHORT = 0x1403;
     public static final int GL_FLOAT = 0x1406;
@@ -43,6 +44,9 @@ public class GLES20 {
     }
 
     public static void glDrawElements(int mode, int count, int type, int offset) {
+    }
+
+    public static void glBufferSubData(int target, int offset, int size, Buffer data) {
     }
 
     public static void glDrawArrays(int mode, int first, int count) {
@@ -120,6 +124,9 @@ public class GLES20 {
     }
 
     public static void glUniform3f(int location, float x, float y, float z) {
+    }
+
+    public static void glUniform4f(int location, float x, float y, float z, float w) {
     }
 
     public static void glUniform1f(int location, float x) {

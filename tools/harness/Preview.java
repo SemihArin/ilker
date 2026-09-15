@@ -41,7 +41,9 @@ public class Preview {
     static float fogDensity = 0.0042f;
     static float night;
     static boolean headlights;
-    static float headX, headY, headZ, headDX, headDY, headDZ;
+    static float headLX, headLY, headLZ, headRX, headRY, headRZ;
+    static float headDX, headDY, headDZ;
+    static float beamOuter = 0.825f, beamInner = 0.968f, beamNear = 5f, beamFar = 70f, beamPower = 3.2f;
 
     public static void main(String[] args) throws Exception {
         File out = new File(args.length > 0 ? args[0] : ".");
@@ -107,11 +109,7 @@ public class Preview {
         float lookX = car.x + fx * 5.5f, lookY = car.y + 1.15f, lookZ = car.z + fz * 5.5f;
 
         headlights = night > 0.42f;
-        headX = car.x + fx * car.spec.length * 0.5f;
-        headY = car.y + car.spec.beltY * 0.75f;
-        headZ = car.z + fz * car.spec.length * 0.5f;
-        float dl = (float) Math.sqrt(1f + 0.14f * 0.14f);
-        headDX = fx / dl; headDY = -0.14f / dl; headDZ = fz / dl;
+        setHeadlights(car);
 
         float[] vp = camera(camX, camY, camZ, lookX, lookY, lookZ);
         float[] identity = new float[16];
@@ -136,8 +134,30 @@ public class Preview {
         for (int i = 0; i < 4; i++) {
             mesh(wv, wi, wheel.indexCount(), vp, car.wheelMatrix(i));
         }
+        if (headlights) {
+            for (int kind : new int[]{CarMesh.LAMP_HEAD, CarMesh.LAMP_TAIL}) {
+                MeshBuilder lamp = CarMesh.buildLamp(spec, kind);
+                mesh(lamp.buildVertexBuffer(), lamp.buildIndexBuffer(), lamp.indexCount(),
+                        vp, car.modelMatrix());
+            }
+        }
 
         lastCar = car;
+    }
+
+    /** Mirrors GameRenderer: two lamps across the nose, aimed slightly down. */
+    static void setHeadlights(Car car) {
+        float fx = car.forwardX(), fz = car.forwardZ();
+        float rx = car.rightX(), rz = car.rightZ();
+        float noseX = car.x + fx * car.spec.length * 0.5f;
+        float noseZ = car.z + fz * car.spec.length * 0.5f;
+        float y = car.y + car.spec.beltY * 0.75f;
+        float out = car.spec.width * 0.30f;
+        headLX = noseX - rx * out; headLY = y; headLZ = noseZ - rz * out;
+        headRX = noseX + rx * out; headRY = y; headRZ = noseZ + rz * out;
+        float dy = -0.14f;
+        float dl = (float) Math.sqrt(1f + dy * dy);
+        headDX = fx / dl; headDY = dy / dl; headDZ = fz / dl;
     }
 
     static void garage(File dir) throws Exception {
@@ -278,16 +298,9 @@ public class Preview {
         float lb = b * (ambient[2] * sky + sunColor[2] * diff);
 
         if (headlights) {
-            float dx = wx - headX, dy = wy - headY, dz = wz - headZ;
-            float dist = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (dist > 0.001f) {
-                dx /= dist; dy /= dist; dz /= dist;
-                float cone = smoothstep(0.86f, 0.972f, dx * headDX + dy * headDY + dz * headDZ);
-                float atten = 1f - smoothstep(5f, 65f, dist);
-                float facing = 0.42f + 0.58f * Math.max(-(nx * dx + ny * dy + nz * dz), 0f);
-                float k = cone * atten * facing * 5.5f;
-                lr += r * 1.00f * k; lg += g * 0.95f * k; lb += b * 0.82f * k;
-            }
+            float k = (beam(headLX, headLY, headLZ, wx, wy, wz, nx, ny, nz)
+                    + beam(headRX, headRY, headRZ, wx, wy, wz, nx, ny, nz)) * beamPower;
+            lr += r * 1.00f * k; lg += g * 0.95f * k; lb += b * 0.82f * k;
         }
 
         float glow = emissive * (0.15f + 0.85f * night);
@@ -305,6 +318,18 @@ public class Preview {
                 lr + (fog[0] - lr) * f,
                 lg + (fog[1] - lg) * f,
                 lb + (fog[2] - lb) * f};
+    }
+
+    static float beam(float lx, float ly, float lz, float wx, float wy, float wz,
+                      float nx, float ny, float nz) {
+        float dx = wx - lx, dy = wy - ly, dz = wz - lz;
+        float dist = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist < 0.001f) return 0f;
+        dx /= dist; dy /= dist; dz /= dist;
+        float cone = smoothstep(beamOuter, beamInner, dx * headDX + dy * headDY + dz * headDZ);
+        float atten = 1f - smoothstep(beamNear, beamFar, dist);
+        float facing = 0.42f + 0.58f * Math.max(-(nx * dx + ny * dy + nz * dz), 0f);
+        return cone * atten * facing;
     }
 
     static void raster(float[][] p, float[][] c) {

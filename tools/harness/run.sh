@@ -21,6 +21,7 @@ javac -nowarn -d "$out" \
     "$src/com/ilker/opendrive/world/Terrain.java" \
     "$src/com/ilker/opendrive/world/ChunkData.java" \
     "$src/com/ilker/opendrive/world/ChunkBuilder.java" \
+    "$src/com/ilker/opendrive/world/Obstacles.java" \
     "$src/com/ilker/opendrive/gl/MeshBuilder.java" \
     "$src/com/ilker/opendrive/gl/Mesh.java" \
     "$src/com/ilker/opendrive/gl/Frustum.java" \
@@ -32,6 +33,7 @@ javac -nowarn -d "$out" \
     "$src/com/ilker/opendrive/game/Car.java" \
     "$src/com/ilker/opendrive/game/CarModels.java" \
     "$src/com/ilker/opendrive/game/Controls.java" \
+    "$src/com/ilker/opendrive/game/SkidMarks.java" \
     "$src/com/ilker/opendrive/game/Traffic.java" \
     "$src/com/ilker/opendrive/ui/PixelFont.java" \
     "$src/com/ilker/opendrive/ui/Hud.java" \

@@ -196,7 +196,8 @@ public class Traffic {
     }
 
     public void draw(SceneProgram program, CarModels models, Frustum frustum,
-                     float[] viewProj, float[] mvpScratch, float camX, float camZ) {
+                     float[] viewProj, float[] mvpScratch, float camX, float camZ,
+                     boolean night) {
         for (Unit u : units) {
             if (!u.active) continue;
             if (!frustum.sphereVisible(u.x, u.y + 1f, u.z, 4.2f)) continue;
@@ -211,6 +212,15 @@ public class Traffic {
 
             Mesh body = models.body(u.specIndex, u.variant);
             if (body != null) body.draw(program);
+
+            if (night) {
+                // Headlights and tail lamps turn the night city into traffic
+                // rather than a row of dark boxes.
+                Mesh head = models.lamp(u.specIndex, CarMesh.LAMP_HEAD);
+                if (head != null) head.draw(program);
+                Mesh tail = models.lamp(u.specIndex, CarMesh.LAMP_TAIL);
+                if (tail != null) tail.draw(program);
+            }
 
             float dx = u.x - camX;
             float dz = u.z - camZ;

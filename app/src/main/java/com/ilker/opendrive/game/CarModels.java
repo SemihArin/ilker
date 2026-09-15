@@ -20,6 +20,7 @@ public class CarModels {
 
     private final Mesh[] bodies = new Mesh[CarSpec.GARAGE.length * VARIANTS];
     private final Mesh[] wheels = new Mesh[CarSpec.GARAGE.length];
+    private final Mesh[] lamps = new Mesh[CarSpec.GARAGE.length * CarMesh.LAMP_KINDS];
 
     /** Must run on the GL thread. */
     public void create() {
@@ -40,6 +41,9 @@ public class CarModels {
                 bodies[s * VARIANTS + v] = Mesh.fromBuilder(mb);
             }
             wheels[s] = Mesh.fromBuilder(CarMesh.buildWheel(spec));
+            for (int k = 0; k < CarMesh.LAMP_KINDS; k++) {
+                lamps[s * CarMesh.LAMP_KINDS + k] = Mesh.fromBuilder(CarMesh.buildLamp(spec, k));
+            }
         }
     }
 
@@ -54,6 +58,13 @@ public class CarModels {
         return wheels[specIndex];
     }
 
+    /** Lit lens mesh; kind is one of the CarMesh.LAMP_* constants. */
+    public Mesh lamp(int specIndex, int kind) {
+        if (specIndex < 0 || specIndex >= CarSpec.GARAGE.length) return null;
+        if (kind < 0 || kind >= CarMesh.LAMP_KINDS) return null;
+        return lamps[specIndex * CarMesh.LAMP_KINDS + kind];
+    }
+
     public void dispose() {
         for (int i = 0; i < bodies.length; i++) {
             if (bodies[i] != null) {
@@ -65,6 +76,12 @@ public class CarModels {
             if (wheels[i] != null) {
                 wheels[i].dispose();
                 wheels[i] = null;
+            }
+        }
+        for (int i = 0; i < lamps.length; i++) {
+            if (lamps[i] != null) {
+                lamps[i].dispose();
+                lamps[i] = null;
             }
         }
     }

@@ -22,6 +22,8 @@ public class HudPreview {
         frame(dir, "hud-day.png", 0.40f, Preview.cityChunk(), 0, false);
         frame(dir, "hud-night.png", 0.92f, Preview.cityChunk(), 3, true);
         frame(dir, "hud-country.png", 0.32f, Preview.ruralChunk(), 1, false);
+        frame(dir, "hud-drift.png", 0.45f, Preview.cityChunk(), 0, true, true);
+        bare(dir, "hud-bare.png");
         // A squarer screen, where the controls leave no room along the bottom.
         Preview.resize(720, 540);
         frame(dir, "hud-narrow.png", 0.40f, Preview.cityChunk(), 5, false);
@@ -29,11 +31,62 @@ public class HudPreview {
         System.out.println("hud previews written to " + dir.getAbsolutePath());
     }
 
+    /** The interface alone on a flat ground, so every element is unmissable. */
+    static void bare(File dir, String name) throws Exception {
+        for (int i = 0; i < Preview.color.length; i += 3) {
+            Preview.color[i] = 0.32f;
+            Preview.color[i + 1] = 0.34f;
+            Preview.color[i + 2] = 0.38f;
+        }
+        Car car = new Car();
+        Controls c = new Controls();
+        car.reset(CarSpec.GARAGE[0], -Terrain.LANE_OFFSET, 0f, 0f);
+        c.throttle = 1f;
+        for (int i = 0; i < 240; i++) car.update(1f / 60f, c);
+        c.steer = 1f;
+        c.handbrake = true;
+        for (int i = 0; i < 30; i++) car.update(1f / 60f, c);
+
+        Traffic traffic = new Traffic();
+        for (int i = 0; i < 300; i++) traffic.update(1f / 60f, car);
+
+        Hud hud = new Hud();
+        hud.layout(Preview.W, Preview.H);
+        HudProgram g = new HudProgram();
+        float[] xs = {Preview.W * 0.05f, Preview.W * 0.93f};
+        float[] ys = {Preview.H * 0.86f, Preview.H * 0.84f};
+        for (int warm = 0; warm < 45; warm++) {
+            hud.processInput(xs, ys, 2, c, 0f, false);
+            g.begin();
+            hud.draw(g, car, traffic, 2, true, 0.45f, 60, "KISA FAR", 1f);
+        }
+        g.begin();
+        hud.draw(g, car, traffic, 2, true, 0.45f, 60, "KISA FAR", 1f);
+        rasterise(g);
+        Preview.write(dir, name);
+        System.out.printf("  %-18s %d hud triangles, drift=%.0f%n",
+                name, triangles(g), car.driftNow);
+    }
+
     static void frame(File dir, String name, float timeOfDay, int[] chunk,
                       int specIndex, boolean pressed) throws Exception {
+        frame(dir, name, timeOfDay, chunk, specIndex, pressed, false);
+    }
+
+    static void frame(File dir, String name, float timeOfDay, int[] chunk,
+                      int specIndex, boolean pressed, boolean drifting) throws Exception {
         Preview.lighting(timeOfDay);
         Preview.scene(chunk, specIndex);
         Car car = Preview.lastCar;
+
+        if (drifting) {
+            // Put the car sideways so the drift meter has something to show.
+            Controls slide = new Controls();
+            slide.throttle = 1f;
+            slide.steer = 1f;
+            slide.handbrake = true;
+            for (int i = 0; i < 26; i++) car.update(1f / 60f, slide);
+        }
 
         Traffic traffic = new Traffic();
         Controls c = new Controls();
@@ -53,9 +106,16 @@ public class HudPreview {
             hud.processInput(new float[0], new float[0], 0, c, 0f, false);
         }
 
+        // The drift meter and the steering readout ease in over about a
+        // second, so run the interface for a moment before capturing a frame.
+        int mode = timeOfDay > 0.8f ? 2 : 0;
+        for (int warm = 0; warm < 45; warm++) {
+            g.begin();
+            hud.draw(g, car, traffic, mode, false, timeOfDay, 60, "SUR VE KESFET", 1f);
+        }
+
         g.begin();
-        hud.draw(g, car, traffic, timeOfDay > 0.8f, false, timeOfDay, 60,
-                "SUR VE KESFET", 1f);
+        hud.draw(g, car, traffic, mode, false, timeOfDay, 60, "SUR VE KESFET", 1f);
         rasterise(g);
 
         Preview.write(dir, name);

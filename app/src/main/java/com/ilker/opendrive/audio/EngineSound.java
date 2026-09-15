@@ -21,9 +21,11 @@ public class EngineSound {
     private volatile float revs = 0.12f;   // 0..1
     private volatile float load = 0f;      // 0..1
     private volatile float volume = 0.55f;
+    private volatile float slip;           // 0..1, how loudly the tyres protest
 
-    private double phase1, phase2, phase3;
+    private double phase1, phase2, phase3, phaseSqueal;
     private float noiseState;
+    private float squealBand;
     private int noiseSeed = 12345;
 
     @SuppressWarnings("deprecation")
@@ -64,6 +66,11 @@ public class EngineSound {
         this.load = clamp(load, 0f, 1f);
     }
 
+    /** Tyre squeal layer: slip 0 is silent, 1 is a full lock-up howl. */
+    public void setSlip(float value) {
+        this.slip = clamp(value, 0f, 1f);
+    }
+
     public void setVolume(float v) {
         this.volume = clamp(v, 0f, 1f);
     }
@@ -71,10 +78,12 @@ public class EngineSound {
     private void render() {
         short[] buffer = new short[CHUNK];
         float smoothedRevs = revs;
+        float smoothedSlip = 0f;
         while (running) {
             AudioTrack t = track;
             if (t == null) break;
             float targetRevs = revs;
+            float targetSlip = slip;
             float amp = volume * (0.30f + 0.55f * load);
 
             for (int i = 0; i < CHUNK; i++) {
@@ -99,6 +108,19 @@ public class EngineSound {
                 float sample = s1 * 0.55f + s2 * 0.26f + s3 * 0.14f
                         + noiseState * (0.05f + 0.10f * smoothedRevs);
                 sample *= amp;
+
+                // Tyre squeal: a narrow band of noise around a rising tone,
+                // which reads as rubber rather than as a synthesiser.
+                smoothedSlip += (targetSlip - smoothedSlip) * 0.0025f;
+                if (smoothedSlip > 0.01f) {
+                    double squealHz = 700.0 + smoothedSlip * 620.0;
+                    phaseSqueal += squealHz / SAMPLE_RATE;
+                    if (phaseSqueal > 1.0) phaseSqueal -= 1.0;
+                    float tone = (float) Math.sin(phaseSqueal * Math.PI * 2.0);
+                    squealBand += (white - squealBand) * 0.55f;
+                    sample += (tone * 0.65f + squealBand * 0.35f)
+                            * smoothedSlip * volume * 0.32f;
+                }
                 // Soft clip keeps it warm rather than crunchy.
                 if (sample > 1f) sample = 1f;
                 if (sample < -1f) sample = -1f;

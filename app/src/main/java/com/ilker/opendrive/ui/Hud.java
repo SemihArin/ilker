@@ -59,6 +59,8 @@ public class Hud {
 
     private boolean leftLit, rightLit, gasLit, brakeLit, handLit;
     private float steerShown;
+    private float steerPressure;
+    private float driftShown;
 
     private final float[] trafficScratch = new float[64];
 
@@ -154,6 +156,7 @@ public class Hud {
         gasLit = false;
         brakeLit = false;
         handLit = false;
+        steerPressure = 0f;
 
         java.util.Arrays.fill(btnNowDown, false);
         float steerInput = 0f;
@@ -165,13 +168,20 @@ public class Hud {
 
             // One zone split down the middle rather than two grown rectangles:
             // overlapping hit areas would cancel each other out in the seam.
+            // How far out the thumb sits decides how much lock, so a small
+            // correction on a straight no longer means full opposite lock.
             if (x <= padRightX + padW + grow && y >= padY - grow) {
-                if (x < steerSplit) {
-                    steerInput -= 1f;
+                float span = (padRightX + padW) - steerSplit;
+                float offset = (x - steerSplit) / Math.max(1f, span);
+                float amount = 0.45f + 0.55f * Math.min(1f, Math.abs(offset) / 0.85f);
+                if (offset < 0f) {
+                    steerInput -= amount;
                     leftLit = true;
+                    steerPressure = amount;
                 } else {
-                    steerInput += 1f;
+                    steerInput += amount;
                     rightLit = true;
+                    steerPressure = amount;
                 }
             }
             // Nearest pedal wins. Growing three circles independently would
@@ -224,14 +234,15 @@ public class Hud {
     // ------------------------------------------------------------------ draw
 
     public void draw(HudProgram g, Car car, Traffic traffic,
-                     boolean lightsOn, boolean tiltEnabled, float timeOfDay, int fps,
+                     int lightMode, boolean tiltEnabled, float timeOfDay, int fps,
                      String message, float messageAlpha) {
         steerShown += (car.steerAngle / 0.62f - steerShown) * 0.35f;
 
         drawMinimap(g, car, traffic);
         drawStats(g, car, timeOfDay, fps);
-        drawButtons(g, lightsOn, tiltEnabled);
+        drawButtons(g, lightMode, tiltEnabled);
         drawDash(g, car);
+        drawDrift(g, car);
         drawSteering(g);
         drawPedals(g);
 
@@ -294,7 +305,7 @@ public class Hud {
         float cy = padY + padH * 0.5f;
         float s = padW * 0.26f;
         float dir = left ? -1f : 1f;
-        float a = lit ? 1f : 0.82f;
+        float a = lit ? 0.55f + 0.45f * steerPressure : 0.72f;
         // A chevron pair reads as a direction far better than one triangle.
         for (int i = 0; i < 2; i++) {
             float off = (i == 0 ? -0.42f : 0.42f) * s;
@@ -336,9 +347,10 @@ public class Hud {
 
     // --------------------------------------------------------------- buttons
 
-    private void drawButtons(HudProgram g, boolean lightsOn, boolean tiltEnabled) {
+    private void drawButtons(HudProgram g, int lightMode, boolean tiltEnabled) {
         for (int i = 0; i < BTN_COUNT; i++) {
-            boolean on = (i == BTN_LIGHTS && lightsOn) || (i == BTN_TILT && tiltEnabled);
+            boolean on = (i == BTN_LIGHTS && (lightMode == 1 || lightMode == 2))
+                    || (i == BTN_TILT && tiltEnabled);
             boolean held = btnDown[i];
             float radius = 2.6f * u;
 
@@ -362,7 +374,7 @@ public class Hud {
             switch (i) {
                 case BTN_CAMERA: iconCamera(g, cx, cy, s, ir, ig, ib, ia); break;
                 case BTN_CAR: iconCar(g, cx, cy, s, ir, ig, ib, ia); break;
-                case BTN_LIGHTS: iconLight(g, cx, cy, s, ir, ig, ib, ia); break;
+                case BTN_LIGHTS: iconLight(g, cx, cy, s, ir, ig, ib, ia, lightMode == 2); break;
                 case BTN_TILT: iconTilt(g, cx, cy, s, ir, ig, ib, ia); break;
                 default: iconReset(g, cx, cy, s, ir, ig, ib, ia); break;
             }
@@ -395,13 +407,15 @@ public class Hud {
     }
 
     private void iconLight(HudProgram g, float cx, float cy, float s,
-                           float r, float gg, float b, float a) {
+                           float r, float gg, float b, float a, boolean mainBeam) {
         float half = (float) Math.PI * 0.5f;
         g.pie(cx - s * 0.25f, cy, s * 0.85f, half, (float) Math.PI, 12, r, gg, b, a);
         g.rect(cx - s * 0.60f, cy - s * 0.85f, s * 0.35f, s * 1.7f, r, gg, b, a);
         for (int i = -1; i <= 1; i++) {
             float y = cy + i * s * 0.55f;
-            g.line(cx + s * 0.45f, y, cx + s * 1.05f, y, s * 0.20f, r, gg, b, a);
+            // Dipped beams angle down, main beams fire straight ahead.
+            float drop = mainBeam ? 0f : s * 0.22f;
+            g.line(cx + s * 0.45f, y, cx + s * 1.10f, y + drop, s * 0.20f, r, gg, b, a);
         }
     }
 
@@ -472,6 +486,33 @@ public class Hud {
 
         PixelFont.draw(g, "KM/S", colX, digitsY + gearH + 0.8f * u, 0.58f * u,
                 TEXT_DIM[0], TEXT_DIM[1], TEXT_DIM[2], 0.95f);
+    }
+
+    /** Live drift score, shown only while the car is actually sideways. */
+    private void drawDrift(HudProgram g, Car car) {
+        float target = car.driftNow > 1f ? 1f : 0f;
+        driftShown += (target - driftShown) * 0.12f;
+        if (driftShown < 0.02f) return;
+
+        // Top centre, under the notification slot: clear of the minimap, clear
+        // of the stats, and clear of the car — which is the point.
+        // Label over number rather than beside it: a long slide runs into four
+        // digits, and side by side they collide.
+        float w = 30f * u;
+        float h = 13f * u;
+        float left = mapX + mapR + 2f * u;
+        float cx = (left + width - 3f * u) * 0.5f;
+        float x = cx - w * 0.5f;
+        float y = btnY + btnH + 11.8f * u;
+        float a = driftShown;
+
+        g.roundedRect(x, y, w, h, 2f * u, PANEL[0], PANEL[1], PANEL[2], 0.80f * a);
+        g.roundedRectOutline(x, y, w, h, 2f * u, 0.3f * u,
+                HAND[0], HAND[1], HAND[2], 0.9f * a);
+        PixelFont.drawCentered(g, "DRIFT", cx, y + 1.5f * u, 0.5f * u,
+                HAND[0], HAND[1], HAND[2], a);
+        PixelFont.drawCentered(g, Integer.toString(Math.round(car.driftNow)),
+                cx, y + 5.6f * u, 0.95f * u, TEXT[0], TEXT[1], TEXT[2], a);
     }
 
     // --------------------------------------------------------------- minimap

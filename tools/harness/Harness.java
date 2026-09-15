@@ -6,6 +6,7 @@ import com.ilker.opendrive.gl.Frustum;
 import com.ilker.opendrive.gl.MeshBuilder;
 import com.ilker.opendrive.world.ChunkBuilder;
 import com.ilker.opendrive.world.ChunkData;
+import com.ilker.opendrive.world.Obstacles;
 import com.ilker.opendrive.world.Terrain;
 
 import java.nio.FloatBuffer;
@@ -32,6 +33,7 @@ public class Harness {
         physics();
         frustum();
         hudLayout();
+        obstacles();
 
         System.out.println();
         System.out.println(failures == 0
@@ -334,9 +336,89 @@ public class Harness {
         for (int i = 0; i < 60 * 60; i++) car.update(dt, c);
         check(car.speedKmh() < onRoad, "the car is slower off the tarmac");
 
+        // ---- wheelspin: a powerful car lights them up off the line, a small
+        //      hatchback does not.
+        float spinGt = launchSpin(CarSpec.GARAGE[0]);
+        float spinHatch = launchSpin(CarSpec.GARAGE[2]);
+        check(spinGt > 0.15f, "the fast car spins its wheels off the line (" + spinGt + ")");
+        check(spinHatch < spinGt, "the small hatchback has less wheelspin than the GT");
+
+        // ---- locked brakes stop the car steering.
+        car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
+        c.clear();
+        c.throttle = 1f;
+        for (int i = 0; i < 300; i++) car.update(dt, c);
+        c.throttle = 0f;
+        c.brake = 1f;
+        float peakLock = 0f;
+        for (int i = 0; i < 40; i++) {
+            car.update(dt, c);
+            peakLock = Math.max(peakLock, car.lockup);
+        }
+        check(peakLock > 0.1f, "standing on the brakes locks the wheels (" + peakLock + ")");
+
+        // ---- lifting off mid-corner rotates the car more than staying on it.
+        float yawOnPower = cornerYaw(true);
+        float yawLiftOff = cornerYaw(false);
+        check(yawLiftOff > yawOnPower,
+                "lifting off tightens the line (" + yawLiftOff + " vs " + yawOnPower + ")");
+
+        // ---- a slide banks points once it is gathered up.
+        car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
+        c.clear();
+        c.throttle = 1f;
+        for (int i = 0; i < 240; i++) car.update(dt, c);
+        c.steer = 1f;
+        c.handbrake = true;
+        for (int i = 0; i < 40; i++) car.update(dt, c);
+        float scoredMidSlide = car.driftNow;
+        check(scoredMidSlide > 0f, "sliding scores drift points (" + scoredMidSlide + ")");
+
+        // Gathering it up banks the run; the live counter goes back to zero.
+        c.steer = 0f;
+        c.handbrake = false;
+        c.throttle = 0f;
+        for (int i = 0; i < 200; i++) car.update(dt, c);
+        check(car.driftNow == 0f, "the live drift counter resets after the slide");
+        check(car.driftTotal >= scoredMidSlide, "a finished slide banks its points ("
+                + car.driftTotal + ")");
+        check(car.driftBest >= scoredMidSlide, "the best single slide is remembered");
+
         // Distance and record keeping.
         check(car.distanceTravelled > 100f, "distance travelled accumulates");
         check(car.topSpeedSeen >= car.speedKmh() - 1f, "top speed record is kept");
+    }
+
+    /** Peak wheelspin in the first second from a standing start. */
+    static float launchSpin(CarSpec spec) {
+        Car car = new Car();
+        Controls c = new Controls();
+        car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
+        c.throttle = 1f;
+        float peak = 0f;
+        for (int i = 0; i < 60; i++) {
+            car.update(1f / 60f, c);
+            peak = Math.max(peak, car.wheelspin);
+        }
+        return peak;
+    }
+
+    /** How far the car rotates through a fixed corner, on or off the power. */
+    static float cornerYaw(boolean onPower) {
+        Car car = new Car();
+        Controls c = new Controls();
+        float dt = 1f / 60f;
+        car.reset(CarSpec.GARAGE[5], -Terrain.LANE_OFFSET, 0f, 0f);
+        c.throttle = 1f;
+        for (int i = 0; i < 200; i++) car.update(dt, c);
+        float start = car.yaw;
+        c.steer = 1f;
+        c.throttle = onPower ? 1f : 0f;
+        for (int i = 0; i < 30; i++) car.update(dt, c);
+        float turned = start - car.yaw;   // yaw decreases turning right
+        while (turned < -Math.PI) turned += (float) (Math.PI * 2);
+        while (turned > Math.PI) turned -= (float) (Math.PI * 2);
+        return turned;
     }
 
     static float cornerSlip(boolean handbrake) {
@@ -357,6 +439,172 @@ public class Harness {
     }
 
     // ------------------------------------------------------------------
+
+    /**
+     * Collision boxes have to line up with the walls that were actually drawn.
+     * This is the whole reason layout and appearance draw from separate random
+     * streams, so it is worth checking rather than assuming: anything you can
+     * see must be something you bump into, and every reported box must have a
+     * building standing on it.
+     */
+    static void obstacles() {
+        System.out.println("[obstacles]");
+        int[][] coords = {{0, 0}, {-3, 2}, {12, 7}, {-40, 55}, {7, 7}, {512, 512}, {-26, -3}};
+        int phantom = 0;
+        int ghost = 0;
+        int boxes = 0;
+        int posts = 0;
+
+        for (int[] c : coords) {
+            final java.util.List<float[]> boxList = new java.util.ArrayList<>();
+            final java.util.List<float[]> postList = new java.util.ArrayList<>();
+            ChunkBuilder.forEachObstacle(c[0], c[1], new ChunkBuilder.ObstacleSink() {
+                @Override
+                public void building(float cx, float cz, float halfW, float halfD) {
+                    boxList.add(new float[]{cx, cz, halfW, halfD});
+                }
+
+                @Override
+                public void post(float cx, float cz, float radius) {
+                    postList.add(new float[]{cx, cz, radius});
+                }
+            });
+            boxes += boxList.size();
+            posts += postList.size();
+
+            ChunkData d = ChunkBuilder.generate(c[0], c[1]);
+            if (d.objectIndexCount == 0) continue;
+            int stride = MeshBuilder.FLOATS_PER_VERTEX;
+            int vertexCount = d.objectVerts.capacity() / stride;
+
+            // Every reported box must have geometry standing on it.
+            for (float[] b : boxList) {
+                boolean found = false;
+                for (int v = 0; v < vertexCount && !found; v++) {
+                    float vx = d.objectVerts.get(v * stride);
+                    float vz = d.objectVerts.get(v * stride + 2);
+                    if (Math.abs(vx - b[0]) <= b[2] + 1.0f
+                            && Math.abs(vz - b[1]) <= b[3] + 1.0f) {
+                        found = true;
+                    }
+                }
+                if (!found) phantom++;
+            }
+
+            // Nothing solid inside the envelope a car body sweeps through may
+            // be missing from the list. The tallest vehicle is 1.86m, so
+            // anything above about 2.2m passes over the roof and is allowed to
+            // be scenery — tree canopies start up there on purpose.
+            for (int v = 0; v < vertexCount; v++) {
+                float vx = d.objectVerts.get(v * stride);
+                float vy = d.objectVerts.get(v * stride + 1);
+                float vz = d.objectVerts.get(v * stride + 2);
+                float ground = Terrain.height(vx, vz);
+                float above = vy - ground;
+                if (above < 1.2f || above > 2.2f) continue;
+
+                boolean covered = false;
+                for (float[] b : boxList) {
+                    if (Math.abs(vx - b[0]) <= b[2] + 1.0f
+                            && Math.abs(vz - b[1]) <= b[3] + 1.0f) {
+                        covered = true;
+                        break;
+                    }
+                }
+                for (int p = 0; p < postList.size() && !covered; p++) {
+                    float[] q = postList.get(p);
+                    float dx = vx - q[0], dz = vz - q[1];
+                    if (dx * dx + dz * dz <= 2.8f * 2.8f) covered = true;
+                }
+                if (!covered) ghost++;
+            }
+        }
+
+        check(boxes > 0, "buildings are reported for collision (" + boxes + " boxes)");
+        check(posts > 0, "street furniture is reported for collision (" + posts + " posts)");
+        check(phantom == 0, "no collision box stands where nothing was built ("
+                + phantom + " did)");
+        check(ghost == 0, "nothing solid at car height is missing from collision ("
+                + ghost + " vertices were)");
+
+        // The walk must not depend on how many times it has been run.
+        final int[] first = {0, 0};
+        final int[] second = {0, 0};
+        ChunkBuilder.forEachObstacle(9, -4, new ChunkBuilder.ObstacleSink() {
+            @Override
+            public void building(float cx, float cz, float hw, float hd) { first[0]++; }
+
+            @Override
+            public void post(float cx, float cz, float r) { first[1]++; }
+        });
+        ChunkBuilder.forEachObstacle(9, -4, new ChunkBuilder.ObstacleSink() {
+            @Override
+            public void building(float cx, float cz, float hw, float hd) { second[0]++; }
+
+            @Override
+            public void post(float cx, float cz, float r) { second[1]++; }
+        });
+        check(first[0] == second[0] && first[1] == second[1],
+                "the obstacle walk is deterministic");
+
+        Obstacles ob = new Obstacles();
+        ob.refresh(0f, 0f);
+        check(ob.obstacleCount() > 0, "obstacles load around the player");
+
+        // Drive at a wall and it has to stop the car, not swallow it.
+        final float[] wall = new float[4];
+        final boolean[] found = {false};
+        for (int i = -6; i <= 6 && !found[0]; i++) {
+            for (int j = -6; j <= 6 && !found[0]; j++) {
+                final int fi = i, fj = j;
+                ChunkBuilder.forEachObstacle(fi, fj, new ChunkBuilder.ObstacleSink() {
+                    @Override
+                    public void building(float cx, float cz, float hw, float hd) {
+                        if (!found[0] && hw > 6f && hd > 6f) {
+                            wall[0] = cx;
+                            wall[1] = cz;
+                            wall[2] = hw;
+                            wall[3] = hd;
+                            found[0] = true;
+                        }
+                    }
+
+                    @Override
+                    public void post(float cx, float cz, float r) {
+                    }
+                });
+            }
+        }
+        check(found[0], "a building was found to crash into");
+
+        if (found[0]) {
+            Car crash = new Car();
+            Controls cc = new Controls();
+            // Line up square on the wall, well clear of it, and floor it.
+            crash.reset(CarSpec.GARAGE[0], wall[0], wall[1] - wall[3] - 45f, 0f);
+            cc.throttle = 1f;
+            float deepest = 0f;
+            float topSpeed = 0f;
+            for (int i = 0; i < 60 * 12; i++) {
+                crash.update(1f / 60f, cc);
+                ob.refresh(crash.x, crash.z);
+                crash.resolveObstacles(ob);
+                topSpeed = Math.max(topSpeed, Math.abs(crash.forwardSpeed));
+                float insideX = wall[2] - Math.abs(crash.x - wall[0]);
+                float insideZ = wall[3] - Math.abs(crash.z - wall[1]);
+                if (insideX > 0f && insideZ > 0f) {
+                    deepest = Math.max(deepest, Math.min(insideX, insideZ));
+                }
+            }
+            check(topSpeed > 15f, "the car got up to speed before the wall");
+            check(deepest < 1.2f, "the car never ends up inside the wall (worst "
+                    + deepest + "m in)");
+            check(!Float.isNaN(crash.x) && !Float.isNaN(crash.z) && !Float.isNaN(crash.yaw),
+                    "collision leaves the car numerically sane");
+            check(Math.abs(crash.forwardSpeed) < topSpeed * 0.75f,
+                    "hitting a wall costs speed");
+        }
+    }
 
     /**
      * Sweeps a single pointer across the whole screen at several aspect ratios

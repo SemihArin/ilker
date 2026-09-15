@@ -57,7 +57,7 @@ public final class ChunkBuilder {
 
         buildTerrain(ground, originX, originZ);
         buildRoads(ground, originX, originZ);
-        buildBlockContents(objects, cx, cz, originX, originZ);
+        blockContents(objects, null, cx, cz);
 
         data.groundIndexCount = ground.indexCount();
         if (data.groundIndexCount > 0) {
@@ -277,9 +277,35 @@ public final class ChunkBuilder {
 
     // ---------------------------------------------------------- block filler
 
-    private static void buildBlockContents(MeshBuilder mb, int cx, int cz,
-                                           float originX, float originZ) {
-        Rng rng = new Rng(cx, cz, 4242);
+    /**
+     * Receives the solid things standing in a chunk. Collision uses this to
+     * learn where the buildings are without building any geometry.
+     */
+    public interface ObstacleSink {
+        void building(float cx, float cz, float halfW, float halfD);
+
+        void post(float cx, float cz, float radius);
+    }
+
+    /**
+     * Walks a chunk's layout and reports what a car could hit.
+     *
+     * Layout and appearance draw from two separate random streams, so this
+     * walk visits exactly the same buildings the mesh builder does even though
+     * it never touches a colour or a window. One stream for both would make
+     * the collision boxes drift away from the walls the moment either side
+     * consumed a number the other did not.
+     */
+    public static void forEachObstacle(int cx, int cz, ObstacleSink sink) {
+        blockContents(null, sink, cx, cz);
+    }
+
+    private static void blockContents(MeshBuilder mb, ObstacleSink sink, int cx, int cz) {
+        float originX = cx * Terrain.CHUNK;
+        float originZ = cz * Terrain.CHUNK;
+        Rng layout = new Rng(cx, cz, 4242);
+        Rng style = new Rng(cx, cz, 9911);
+
         float centreX = originX + Terrain.CHUNK * 0.5f;
         float centreZ = originZ + Terrain.CHUNK * 0.5f;
         float urban = Terrain.urban(centreX, centreZ);
@@ -289,40 +315,49 @@ public final class ChunkBuilder {
         float hi = Terrain.CHUNK - margin;
 
         if (urban > 0.55f) {
-            streetLights(mb, originX, originZ, 26f);
-            int div = rng.chance(0.45f) ? 2 : 3;
-            fillPlots(mb, rng, originX, originZ, lo, hi, div, urban, true);
+            streetLights(mb, sink, originX, originZ, 26f);
+            int div = layout.chance(0.45f) ? 2 : 3;
+            fillPlots(mb, sink, layout, style, originX, originZ, lo, hi, div, urban, true);
         } else if (urban > 0.22f) {
-            streetLights(mb, originX, originZ, 38f);
-            fillPlots(mb, rng, originX, originZ, lo, hi, 2, urban, false);
-            scatterTrees(mb, rng, originX, originZ, lo, hi, 4);
+            streetLights(mb, sink, originX, originZ, 38f);
+            fillPlots(mb, sink, layout, style, originX, originZ, lo, hi, 2, urban, false);
+            scatterTrees(mb, sink, layout, style, originX, originZ, lo, hi, 4);
         } else {
-            if (rng.chance(0.30f)) {
-                fillPlots(mb, rng, originX, originZ, lo, hi, 1, urban, false);
+            if (layout.chance(0.30f)) {
+                fillPlots(mb, sink, layout, style, originX, originZ, lo, hi, 1, urban, false);
             }
-            scatterTrees(mb, rng, originX, originZ, lo, hi, 16);
-            scatterRocks(mb, rng, originX, originZ, lo, hi, 5);
+            scatterTrees(mb, sink, layout, style, originX, originZ, lo, hi, 16);
+            scatterRocks(mb, sink, layout, style, originX, originZ, lo, hi, 5);
         }
     }
 
-    private static void fillPlots(MeshBuilder mb, Rng rng, float originX, float originZ,
+    private static void fillPlots(MeshBuilder mb, ObstacleSink sink, Rng layout, Rng style,
+                                  float originX, float originZ,
                                   float lo, float hi, int div, float urban, boolean tower) {
         float span = (hi - lo) / div;
         for (int i = 0; i < div; i++) {
             for (int j = 0; j < div; j++) {
-                if (!tower && !rng.chance(0.75f)) continue;
-                if (tower && !rng.chance(0.88f)) continue;
-
+                boolean occupied = tower ? layout.chance(0.88f) : layout.chance(0.75f);
                 float plotCx = originX + lo + span * (i + 0.5f);
                 float plotCz = originZ + lo + span * (j + 0.5f);
                 float maxFoot = span * 0.82f;
-                float w = rng.range(maxFoot * 0.55f, maxFoot);
-                float d = rng.range(maxFoot * 0.55f, maxFoot);
+                float w = layout.range(maxFoot * 0.55f, maxFoot);
+                float d = layout.range(maxFoot * 0.55f, maxFoot);
+                if (!occupied) continue;
+
+                if (!tower) {
+                    w = Math.min(w, 16f);
+                    d = Math.min(d, 13f);
+                }
+                if (sink != null) {
+                    sink.building(plotCx, plotCz, w * 0.5f, d * 0.5f);
+                }
+                if (mb == null) continue;
 
                 if (tower) {
-                    tower(mb, rng, plotCx, plotCz, w, d, urban);
+                    tower(mb, style, plotCx, plotCz, w, d, urban);
                 } else {
-                    house(mb, rng, plotCx, plotCz, Math.min(w, 16f), Math.min(d, 13f));
+                    house(mb, style, plotCx, plotCz, w, d);
                 }
             }
         }
@@ -419,14 +454,47 @@ public final class ChunkBuilder {
                 rr * 0.7f, rr * 0.4f, rr * 0.3f, 0f);
     }
 
-    private static void streetLights(MeshBuilder mb, float originX, float originZ, float spacing) {
+    private static void streetLights(MeshBuilder mb, ObstacleSink sink,
+                                     float originX, float originZ, float spacing) {
         int count = Math.max(1, Math.round(Terrain.CHUNK / spacing));
         float off = Terrain.PAVEMENT_HALF - 1.0f;
         for (int i = 0; i < count; i++) {
             float t = (i + 0.5f) / count;
             // One lamp on each of the chunk's two road edges.
-            lamp(mb, originX + off, originZ + Terrain.CHUNK * t, true);
-            lamp(mb, originX + Terrain.CHUNK * t, originZ + off, false);
+            float ax = originX + off, az = originZ + Terrain.CHUNK * t;
+            float bx = originX + Terrain.CHUNK * t, bz = originZ + off;
+            if (sink != null) {
+                sink.post(ax, az, 0.35f);
+                sink.post(bx, bz, 0.35f);
+            }
+            if (mb != null) {
+                lamp(mb, ax, az, true);
+                lamp(mb, bx, bz, false);
+            }
+        }
+    }
+
+    /**
+     * A disc of warm light on the ground under a lamp. The emissive channel is
+     * scaled by the night factor in the shader, so this costs nothing by day
+     * and turns the street into a row of pools after dark.
+     */
+    private static void lightPool(MeshBuilder mb, float cx, float cz, float radius) {
+        int n = 10;
+        float lift = 0.035f;
+        int centre = mb.vertex(cx, Terrain.surfaceHeight(cx, cz) + lift, cz,
+                0f, 1f, 0f, 1f, 0.92f, 0.72f, 0.5f);
+        int[] ring = new int[n];
+        for (int i = 0; i < n; i++) {
+            double a = (Math.PI * 2.0 * i) / n;
+            float x = cx + (float) Math.cos(a) * radius;
+            float z = cz + (float) Math.sin(a) * radius;
+            ring[i] = mb.vertex(x, Terrain.surfaceHeight(x, z) + lift, z,
+                    0f, 1f, 0f, 1f, 0.92f, 0.72f, 0f);
+        }
+        for (int i = 0; i < n; i++) {
+            // Reversed, because a ring listed anticlockwise in (x, z) faces -Y.
+            mb.triangle(centre, ring[(i + 1) % n], ring[i]);
         }
     }
 
@@ -439,19 +507,23 @@ public final class ChunkBuilder {
         if (armTowardsMinusX) {
             mb.box(x + dir * armLen * 0.5f, y + poleH, z, armLen, 0.14f, 0.14f, 0.30f, 0.31f, 0.33f, 0f);
             mb.box(x + dir * armLen, y + poleH - 0.18f, z, 0.85f, 0.22f, 0.36f, 1f, 0.93f, 0.72f, 1f);
+            lightPool(mb, x + dir * armLen, z, 4.2f);
         } else {
             mb.box(x, y + poleH, z + dir * armLen * 0.5f, 0.14f, 0.14f, armLen, 0.30f, 0.31f, 0.33f, 0f);
             mb.box(x, y + poleH - 0.18f, z + dir * armLen, 0.36f, 0.22f, 0.85f, 1f, 0.93f, 0.72f, 1f);
+            lightPool(mb, x, z + dir * armLen, 4.2f);
         }
     }
 
-    private static void scatterTrees(MeshBuilder mb, Rng rng, float originX, float originZ,
+    private static void scatterTrees(MeshBuilder mb, ObstacleSink sink, Rng layout, Rng style,
+                                     float originX, float originZ,
                                      float lo, float hi, int count) {
         for (int i = 0; i < count; i++) {
-            float x = originX + rng.range(lo - 6f, hi + 6f);
-            float z = originZ + rng.range(lo - 6f, hi + 6f);
+            float x = originX + layout.range(lo - 6f, hi + 6f);
+            float z = originZ + layout.range(lo - 6f, hi + 6f);
             if (Terrain.distanceToRoadCentre(x, z) < Terrain.PAVEMENT_HALF + 1.5f) continue;
-            tree(mb, rng, x, z);
+            if (sink != null) sink.post(x, z, 0.55f);
+            if (mb != null) tree(mb, style, x, z);
         }
     }
 
@@ -470,10 +542,11 @@ public final class ChunkBuilder {
         float lb = 0.14f + shade * 0.08f;
 
         if (rng.chance(0.35f)) {
-            // Conifer: stacked cones.
+            // Conifer: stacked cones, with the skirt kept above bonnet height
+            // so the collidable trunk is the only part a car can reach.
             float h = 4.2f * scale;
-            mb.cylinder(x, y + trunkH * 0.6f, z, leafR, leafR * 0.55f, h * 0.55f, 7, lr, lg, lb, 0f);
-            mb.cylinder(x, y + trunkH * 0.6f + h * 0.45f, z, leafR * 0.72f, 0.02f, h * 0.7f, 7,
+            mb.cylinder(x, y + trunkH * 0.95f, z, leafR, leafR * 0.55f, h * 0.55f, 7, lr, lg, lb, 0f);
+            mb.cylinder(x, y + trunkH * 0.95f + h * 0.45f, z, leafR * 0.72f, 0.02f, h * 0.7f, 7,
                     lr * 1.1f, lg * 1.1f, lb * 1.1f, 0f);
         } else {
             // Broadleaf: a squat bipyramid reads as a canopy at distance.
@@ -484,19 +557,22 @@ public final class ChunkBuilder {
         }
     }
 
-    private static void scatterRocks(MeshBuilder mb, Rng rng, float originX, float originZ,
+    private static void scatterRocks(MeshBuilder mb, ObstacleSink sink, Rng layout, Rng style,
+                                     float originX, float originZ,
                                      float lo, float hi, int count) {
         for (int i = 0; i < count; i++) {
-            float x = originX + rng.range(lo - 8f, hi + 8f);
-            float z = originZ + rng.range(lo - 8f, hi + 8f);
+            float x = originX + layout.range(lo - 8f, hi + 8f);
+            float z = originZ + layout.range(lo - 8f, hi + 8f);
+            float s = layout.range(0.5f, 1.9f);
             if (Terrain.distanceToRoadCentre(x, z) < Terrain.PAVEMENT_HALF + 2f) continue;
+            if (sink != null) sink.post(x, z, s * 0.8f);
+            if (mb == null) continue;
             float y = Terrain.height(x, z) - 0.3f;
-            float s = rng.range(0.5f, 1.9f);
-            float grey = rng.range(0.34f, 0.52f);
+            float grey = style.range(0.34f, 0.52f);
             mb.push();
             mb.translate(x, y, z);
-            mb.rotateY(rng.range(0f, 360f));
-            mb.cylinder(0f, 0f, 0f, s, s * 0.55f, s * rng.range(0.6f, 1.1f), 6,
+            mb.rotateY(style.range(0f, 360f));
+            mb.cylinder(0f, 0f, 0f, s, s * 0.55f, s * style.range(0.6f, 1.1f), 6,
                     grey, grey * 0.98f, grey * 0.92f, 0f);
             mb.pop();
         }

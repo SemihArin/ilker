@@ -38,29 +38,38 @@ public class SceneProgram {
             "uniform vec3 uFogColor;\n" +
             "uniform float uFogDensity;\n" +
             "uniform vec3 uCamPos;\n" +
-            "uniform vec3 uHeadPos;\n" +
+            "uniform vec3 uHeadL;\n" +
+            "uniform vec3 uHeadR;\n" +
             "uniform vec3 uHeadDir;\n" +
             "uniform float uHeadOn;\n" +
+            "uniform vec4 uHeadShape;\n" +   // outer cos, inner cos, near, far
+            "uniform float uHeadPower;\n" +
             "uniform float uNight;\n" +
             "varying vec3 vWorld;\n" +
             "varying vec3 vNormal;\n" +
             "varying vec3 vColor;\n" +
             "varying float vEmissive;\n" +
+            "float beam(vec3 lamp, vec3 world, vec3 n) {\n" +
+            "  vec3 d = world - lamp;\n" +
+            "  float dist = length(d);\n" +
+            "  vec3 dir = d / max(dist, 0.001);\n" +
+            "  float cone = smoothstep(uHeadShape.x, uHeadShape.y, dot(dir, uHeadDir));\n" +
+            "  float atten = 1.0 - smoothstep(uHeadShape.z, uHeadShape.w, dist);\n" +
+            // Wrapped so the road ahead, which the beam only grazes, still
+            // lights up instead of falling to nothing.
+            "  float facing = 0.42 + 0.58 * max(dot(n, -dir), 0.0);\n" +
+            "  return cone * atten * facing;\n" +
+            "}\n" +
             "void main() {\n" +
             "  vec3 n = normalize(vNormal);\n" +
             "  float diff = max(dot(n, uSunDir), 0.0);\n" +
             "  float sky = 0.5 + 0.5 * n.y;\n" +
             "  vec3 lit = vColor * (uAmbient * sky + uSunColor * diff);\n" +
+            // Two lamps, not one: a single central cone gives the car a
+            // cyclops beam that never lights the verge it is turning towards.
             "  if (uHeadOn > 0.5) {\n" +
-            "    vec3 d = vWorld - uHeadPos;\n" +
-            "    float dist = length(d);\n" +
-            "    vec3 dir = d / max(dist, 0.001);\n" +
-            "    float cone = smoothstep(0.86, 0.972, dot(dir, uHeadDir));\n" +
-            "    float atten = 1.0 - smoothstep(5.0, 65.0, dist);\n" +
-            // Wrapped so the road ahead, which the beam only grazes, still
-            // lights up instead of falling to nothing.
-            "    float facing = 0.42 + 0.58 * max(dot(n, -dir), 0.0);\n" +
-            "    lit += vColor * vec3(1.0, 0.95, 0.82) * cone * atten * facing * 5.5;\n" +
+            "    float b = beam(uHeadL, vWorld, n) + beam(uHeadR, vWorld, n);\n" +
+            "    lit += vColor * vec3(1.0, 0.95, 0.82) * b * uHeadPower;\n" +
             "  }\n" +
             "  float glow = vEmissive * mix(0.15, 1.0, uNight);\n" +
             "  lit = mix(lit, vColor * 1.25, clamp(glow, 0.0, 1.0));\n" +
@@ -74,7 +83,7 @@ public class SceneProgram {
     private int program;
     private int aPos, aNormal, aColor, aEmissive;
     private int uMvp, uModel, uSunDir, uSunColor, uAmbient, uFogColor, uFogDensity;
-    private int uCamPos, uHeadPos, uHeadDir, uHeadOn, uNight;
+    private int uCamPos, uHeadL, uHeadR, uHeadDir, uHeadOn, uHeadShape, uHeadPower, uNight;
 
     public void create() {
         program = ShaderUtil.buildProgram(VERTEX_SRC, FRAGMENT_SRC);
@@ -90,9 +99,12 @@ public class SceneProgram {
         uFogColor = GLES20.glGetUniformLocation(program, "uFogColor");
         uFogDensity = GLES20.glGetUniformLocation(program, "uFogDensity");
         uCamPos = GLES20.glGetUniformLocation(program, "uCamPos");
-        uHeadPos = GLES20.glGetUniformLocation(program, "uHeadPos");
+        uHeadL = GLES20.glGetUniformLocation(program, "uHeadL");
+        uHeadR = GLES20.glGetUniformLocation(program, "uHeadR");
         uHeadDir = GLES20.glGetUniformLocation(program, "uHeadDir");
         uHeadOn = GLES20.glGetUniformLocation(program, "uHeadOn");
+        uHeadShape = GLES20.glGetUniformLocation(program, "uHeadShape");
+        uHeadPower = GLES20.glGetUniformLocation(program, "uHeadPower");
         uNight = GLES20.glGetUniformLocation(program, "uNight");
     }
 
@@ -143,10 +155,23 @@ public class SceneProgram {
         GLES20.glUniform3f(uCamPos, x, y, z);
     }
 
-    public void setHeadlights(boolean on, float px, float py, float pz,
+    /**
+     * Positions of the two lamps and the direction they point. Turning them
+     * off is a separate flag rather than a zero power so the branch is cheap.
+     */
+    public void setHeadlights(boolean on,
+                              float lx, float ly, float lz,
+                              float rx, float ry, float rz,
                               float dx, float dy, float dz) {
         GLES20.glUniform1f(uHeadOn, on ? 1f : 0f);
-        GLES20.glUniform3f(uHeadPos, px, py, pz);
+        GLES20.glUniform3f(uHeadL, lx, ly, lz);
+        GLES20.glUniform3f(uHeadR, rx, ry, rz);
         GLES20.glUniform3f(uHeadDir, dx, dy, dz);
+    }
+
+    /** Beam shape: cone edges as cosines, the range it fades over, and gain. */
+    public void setBeam(float coneOuter, float coneInner, float near, float far, float power) {
+        GLES20.glUniform4f(uHeadShape, coneOuter, coneInner, near, far);
+        GLES20.glUniform1f(uHeadPower, power);
     }
 }

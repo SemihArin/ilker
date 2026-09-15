@@ -7,16 +7,16 @@ ağaçlar, sokak lambaları, trafik ve tam bir gündüz–gece döngüsü.
 Oyun motoru dahil her şey bu depodaki Java kaynağından geliyor. Hiçbir hazır
 oyun motoru, hiçbir 3B model dosyası, hiçbir doku, hiçbir ses dosyası yok —
 araçların gövdeleri, binalar, arazi ve motor sesi hepsi kod içinde üretiliyor.
-Bu yüzden APK sadece **88 KB**.
+Bu yüzden APK sadece **94 KB**.
 
 | | |
 |---|---|
 | ![Şehir, gündüz](docs/hud-day.png) | ![Şehir, gece](docs/hud-night.png) |
-| ![Kırsal](docs/hud-country.png) | ![Garaj](docs/garage.png) |
+| ![Drift](docs/hud-drift.png) | ![Garaj](docs/garage.png) |
 
 ## Kurulum
 
-`dist/ilker-drive-1.1.apk` dosyasını telefonuna kopyala ve aç. Android
+`dist/ilker-drive-1.2.apk` dosyasını telefonuna kopyala ve aç. Android
 "bilinmeyen kaynaklardan yükleme" izni isteyecek; tarayıcına veya dosya
 yöneticine bu izni ver.
 
@@ -27,18 +27,42 @@ Oyun yatay moda kilitlidir.
 
 | Kontrol | Yer |
 |---|---|
-| Direksiyon | Sol alttaki iki büyük ok pedi. Sol alt köşenin tamamı direksiyon bölgesi sayılır; ortadan solda kalan dokunuş sola, sağda kalan sağa çevirir |
+| Direksiyon | Sol alt köşenin tamamı direksiyon bölgesi. Ortadan solda kalan dokunuş sola, sağda kalan sağa çevirir — ve **ne kadar dışta basarsan o kadar çok kırar**, yani düz yolda küçük düzeltme yapabilirsin |
 | Gaz / Fren | Sağ alttaki yuvarlak düğmeler |
 | El freni (drift) | Frenin üstündeki turuncu düğme |
 | KAM | Kamerayı değiştirir: takip → kaput → geniş açı |
 | ARAC | Garajdaki altı araç arasında geçiş yapar |
-| ISIK | Farları açar / otomatiğe alır (gece kendiliğinden yanar) |
+| ISIK | Far modu: otomatik → kısa → uzun → kapalı |
 | EGIM | Telefonu yana yatırarak direksiyon. Açtığın andaki duruşun nötr kabul edilir |
 | SIFIR | Takılırsan seni en yakın yola geri koyar |
 
 Sol üstte pusula gibi dönen bir mini harita, altında mesafe / hız rekoru / saat,
 altta ortada hız paneli var. Sarı noktalar trafikteki diğer araçlar. Ekranın
 ortası bilerek boş bırakıldı — bakman gereken yer orası.
+
+## Sürüş
+
+Lastikler belirli bir kayma açısına kadar tutar, o açıyı geçince **tutuşu
+bırakır ve bırakmaya devam eder** — direksiyonu geri alana kadar. Ters
+direksiyonun bir işe yaramasının sebebi bu. Aynı döngüyü ağırlık transferi
+besliyor: gazı keserek viraja girersen araç içeri döner, gazda kalırsan burun
+dışarı kaçar.
+
+Bunun yanında:
+
+- **Patinaj** — güçlü araçlarda dururken tam gaz lastikleri döndürür, çekişi
+  ve yanal tutuşu azaltır. El freni + gaz = kalkış dumanı.
+- **Fren kilitlenmesi** — sert frende tekerler kilitlenir, direksiyon işlemez
+  olur ve ön lastikler iz bırakır.
+- **Lastik izleri** — kayan ve patinaj yapan tekerler yola gerçekten iz bırakır.
+- **Çarpışma** — binalara, ağaçlara, kayalara ve sokak lambalarına çarpılır.
+  Burnuna gelen sıyırma darbesi aracı döndürür; telefon da titrer.
+- **Drift puanı** — yan giderken puan birikir, toparlayınca hanene yazılır.
+- **Işıklar** — iki ayrı far konisi (kısa huzme aşağı, uzun huzme ileri ve
+  uzağa), fren lambası, geri vites lambası, gece yanan sokak lambası havuzları
+  ve trafikteki araçların farları.
+- **Ses** — kayan lastiğin ciyaklaması, patinajda yükselen devir.
+- **Kamera** — hızda ve bozuk zeminde titrer; kaput kamerasında daha çok.
 
 ## Garaj
 
@@ -93,7 +117,7 @@ dosyalarını** masaüstü JVM'de derleyip çalıştırır (`android.opengl.Matr
 yerine birebir aynı davranan bir kopya konur):
 
 ```bash
-tools/harness/run.sh            # 142 kontrol
+tools/harness/run.sh            # 161 kontrol
 tools/harness/run.sh --preview  # kontroller + docs/*.png görüntülerini yeniden üretir
 ```
 
@@ -113,6 +137,14 @@ işaret kuralına değil, geometrinin tanımına bakıyor.
 ekranın her yerinde gezdirip hiçbir noktanın aynı anda iki kontrolü birden
 tetiklemediğini doğruluyor — geliştiricinin kendi telefonunda görünmeyen,
 başkasının telefonunda sinir bozucu olan türden bir hata.
+
+**Çarpışma testi** en kritiği: dünya üreticisinin çizdiği duvarlarla çarpışma
+kutularının aynı yerde olduğunu doğruluyor. Bunun için bina yerleşimi ile bina
+görünümü ayrı rastgele akışlardan besleniyor; böylece çarpışma yürüyüşü hiçbir
+renk veya pencere sayısı okumadan mesh'in gezdiği aynı binaları geziyor. Test
+iki yönü de kontrol ediyor: bildirilen her kutunun üstünde gerçekten bir bina
+var mı, ve araç gövdesi yüksekliğindeki her katı yüzey çarpışma listesinde mi.
+Ayrıca bir araç duvara sürülüp içine girmediği ve hız kaybettiği ölçülüyor.
 
 `Preview.java` oyunun kendi gölgelendirici matematiğini taklit eden küçük bir
 yazılımsal rasterleştirici; `HudPreview.java` ise gerçek `Hud` kodunu masaüstünde
