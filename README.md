@@ -7,7 +7,7 @@ ağaçlar, sokak lambaları, trafik ve tam bir gündüz–gece döngüsü.
 Oyun motoru dahil her şey bu depodaki Java kaynağından geliyor. Hiçbir hazır
 oyun motoru, hiçbir 3B model dosyası, hiçbir doku, hiçbir ses dosyası yok —
 araçların gövdeleri, binalar, arazi ve motor sesi hepsi kod içinde üretiliyor.
-Bu yüzden APK sadece **94 KB**.
+Bu yüzden APK sadece **96 KB**.
 
 | | |
 |---|---|
@@ -16,7 +16,7 @@ Bu yüzden APK sadece **94 KB**.
 
 ## Kurulum
 
-`dist/ilker-drive-1.2.apk` dosyasını telefonuna kopyala ve aç. Android
+`dist/ilker-drive-1.3.apk` dosyasını telefonuna kopyala ve aç. Android
 "bilinmeyen kaynaklardan yükleme" izni isteyecek; tarayıcına veya dosya
 yöneticine bu izni ver.
 
@@ -48,6 +48,18 @@ direksiyonun bir işe yaramasının sebebi bu. Aynı döngüyü ağırlık trans
 besliyor: gazı keserek viraja girersen araç içeri döner, gazda kalırsan burun
 dışarı kaçar.
 
+Motor **gerçek bir şanzımandan** çekiyor: bir tork eğrisi, içinde bulunduğu
+vitesin oranıyla çarpılıyor. Birinci vites lastikleri yener, altıncı zar zor
+çeker, vites değişiminde tork kesilir ve devir düşer — duyduğun vites
+değişimi aracın gerçekten yaptığı vites değişimi. Bu yüzden araçlar artık
+birbirinden ayırt edilebiliyor: GT 3.2 saniyede 100'e çıkarken hatchback 9.6
+saniye alıyor.
+
+Gövde zemine yapışık değil: kendi dikey hızını taşıyor. **Kaldırımdan hızlı
+inersen araç havalanır**, yerçekimi geri indirir, yaylar oturur. Yerçekimi
+yokuş boyunca da etki ediyor — yokuş yukarı yavaşlarsın, aşağı hızlanırsın,
+ve el freni çekmezsen park ettiğin araç geri kaçar.
+
 Bunun yanında:
 
 - **Patinaj** — güçlü araçlarda dururken tam gaz lastikleri döndürür, çekişi
@@ -62,7 +74,11 @@ Bunun yanında:
   uzağa), fren lambası, geri vites lambası, gece yanan sokak lambası havuzları
   ve trafikteki araçların farları.
 - **Ses** — kayan lastiğin ciyaklaması, patinajda yükselen devir.
-- **Kamera** — hızda ve bozuk zeminde titrer; kaput kamerasında daha çok.
+- **Kamera** — hızda, bozuk zeminde ve sert inişlerde titrer; kaput
+  kamerasında daha çok.
+- **Trafik** — önündeki araç senin için yavaşlar ve stop lambaları yanar.
+- **Geri vites** — dururken frene basınca geri vites seçilir; geri viteste
+  fren pedalı gaz, gaz pedalı fren olur.
 
 ## Garaj
 
@@ -70,14 +86,14 @@ Altı aracın hepsi `CarSpec.GARAGE` içindeki sayılarla tanımlı — gövde o
 ve yol tutuşu. Yeni bir araç eklemek için tek yapman gereken o diziye bir satır
 daha yazmak.
 
-| Araç | Son hız | Karakter |
-|---|---|---|
-| SIMSEK GT | 277 km/s | Alçak, geniş, en hızlısı |
-| KARTAL SUV | 209 km/s | Yüksek, sağlam, kaldırımdan korkmaz |
-| MINIK HATCH | 169 km/s | Kısa dingil, kavşaklarda çevik |
-| KAS MUSCLE | 256 km/s | Uzun kaput, arkası kaygan — drift makinesi |
-| YUK PICKUP | 184 km/s | Açık kasa, ağır, toprakta rahat |
-| KLASIK SEDAN | 216 km/s | Dengeli |
+| Araç | 0-100 | Son hız | Karakter |
+|---|---|---|---|
+| SIMSEK GT | 3.2 sn | 277 km/s | Alçak, geniş, lastikleri yakar |
+| KAS MUSCLE | 4.9 sn | 256 km/s | Uzun kaput, arkası kaygan — drift makinesi |
+| KLASIK SEDAN | 6.5 sn | 216 km/s | Dengeli |
+| KARTAL SUV | 7.4 sn | 209 km/s | Yüksek, sağlam, kaldırımdan korkmaz |
+| MINIK HATCH | 9.6 sn | 169 km/s | Yavaş ama kısa dingil, kavşaklarda çevik |
+| YUK PICKUP | 9.6 sn | 184 km/s | Açık kasa, ağır, toprakta rahat |
 
 ## Derleme
 
@@ -126,6 +142,12 @@ geometrisinin indeks sınırları içinde kalması, her üçgenin doğru yöne b
 (arka yüz eleme yanlış sarımlı üçgenleri yutar), araç gövdelerinin tutarlılığı,
 her aracın ilan ettiği son hıza ulaşması, frenin geri vitese geçmesi, el
 freninin gerçekten kaydırması, toprakta yavaşlaması ve frustum elemesi.
+
+**Sürüş mekaniği testleri**: her aracın altı vitesi de kullanması ve vites
+değişiminde devrin düşmesi, devir sınırlayıcısının tutması, yavaşlarken vites
+küçültmesi, her aracın 0-100 süresinin inandırıcı bir aralıkta olması, yokuşta
+park eden aracın geri kaçması ve el freninin onu tutması, kaldırımdan hızlı
+inen aracın havalanıp geri inmesi, süspansiyonun dururken oturması.
 
 Ayrıca **direksiyonun doğru yöne çevirmesi**: aracın gittiği yön, "sağ"ın
 tanımından (ileri × yukarı çapraz çarpımı) bağımsız olarak, üç farklı başlangıç

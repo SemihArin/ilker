@@ -474,7 +474,7 @@ public class Hud {
 
         // Gear badge above, unit below — never on top of one another.
         float colX = digitsRight + 2.6f * u;
-        String gear = car.forwardSpeed < -0.4f ? "R"
+        String gear = car.inReverse ? "R"
                 : (Math.abs(car.forwardSpeed) < 0.4f ? "N" : ("D" + car.gear));
         float gearPixel = 0.78f * u;
         float gearW = PixelFont.width(gear, gearPixel) + 2.6f * u;

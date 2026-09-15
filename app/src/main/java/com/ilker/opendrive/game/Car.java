@@ -14,10 +14,30 @@ import com.ilker.opendrive.world.Terrain;
  * peak: below it the tyres bite, above it they let go and keep letting go
  * until the driver reduces the angle. That is what makes opposite lock work.
  *
- * Weight transfer feeds the same loop from the other end — lifting off loads
- * the front and rotates the car, standing on the power washes the nose wide.
+ * Longitudinally the engine drives through a real gearbox — a torque curve
+ * multiplied by the gear the car happens to be in — so first gear overwhelms
+ * the tyres, sixth barely pulls, and the revs the audio hears are the revs the
+ * engine is actually turning.
+ *
+ * Vertically the body is not glued to the ground: it carries a vertical
+ * velocity, so a kerb throws it into the air and gravity brings it back down
+ * onto a sprung body that settles afterwards. Gravity also acts along the
+ * slope, which is what finally makes hills mean something.
  */
 public class Car {
+
+    private static final float GRAVITY = 9.81f;
+
+    /**
+     * Gear ratios, as a multiplier on drive force. The top gear is chosen so
+     * that full throttle at the rev limiter exactly balances aerodynamic drag
+     * at the quoted top speed; the rest space out from there.
+     */
+    private static final float[] GEAR_RATIO = {2.90f, 2.05f, 1.55f, 1.24f, 1.02f, 0.84f};
+    private static final float SHIFT_TIME = 0.16f;
+    private static final float IDLE_REVS = 0.12f;
+    /** Rolling resistance. Small — it is tyres on tarmac, not a handbrake. */
+    private static final float ROLLING = 0.35f;
 
     public CarSpec spec;
 
@@ -41,6 +61,19 @@ public class Car {
     /** True while the tyres are audibly giving up. */
     public boolean sliding;
 
+    /** 0..1 of the rev range; 1 is the limiter. */
+    public float engineRevs = IDLE_REVS;
+    /** Displayed gear, 1..6. */
+    public int gear = 1;
+    public boolean inReverse;
+    public boolean shifting;
+
+    /** True while all four wheels are off the ground. */
+    public boolean airborne;
+    public float airTime;
+    /** Vertical speed of the last touchdown, for haptics and the camera. */
+    public float landing;
+
     public float driftNow;
     public float driftBest;
     public float driftTotal;
@@ -49,13 +82,18 @@ public class Car {
     /** Speed of the last impact in m/s, decaying; drives haptics and audio. */
     public float impact;
 
-    public int gear = 1;
     public float distanceTravelled;
     public float topSpeedSeen;
 
+    private int gearIndex;
+    private float shiftTimer;
     private float bodyPitch;
     private float bodyRoll;
-    private float suspensionY;
+    private float bodyY;         // sprung body height, what gets drawn
+    private float bodyVelY;      // suspension travel speed
+    private float wheelY;        // where the wheels are
+    private float velY;          // vertical speed of the chassis
+    private float lastGround;
     private float lastForwardSpeed;
 
     private final float[] model = new float[16];
@@ -67,8 +105,16 @@ public class Car {
         this.x = startX;
         this.z = startZ;
         this.yaw = startYaw;
-        this.y = Terrain.surfaceHeight(startX, startZ);
-        this.suspensionY = this.y;
+        float ground = Terrain.surfaceHeight(startX, startZ);
+        this.wheelY = ground;
+        this.bodyY = ground;
+        this.y = ground;
+        this.lastGround = ground;
+        bodyVelY = 0f;
+        velY = 0f;
+        airborne = false;
+        airTime = 0f;
+        landing = 0f;
         vx = 0f;
         vz = 0f;
         forwardSpeed = 0f;
@@ -87,6 +133,12 @@ public class Car {
         driftGrace = 0f;
         impact = 0f;
         lastForwardSpeed = 0f;
+        gearIndex = 0;
+        gear = 1;
+        inReverse = false;
+        shifting = false;
+        shiftTimer = 0f;
+        engineRevs = IDLE_REVS;
     }
 
     /** Keeps the current position and momentum but swaps the vehicle. */
@@ -116,6 +168,17 @@ public class Car {
         float surface = Terrain.surfaceGrip(x, z);
         float absV = Math.abs(vLong);
 
+        // ---- how the ground lies under the car, needed before the engine so
+        //      gravity along the slope can be part of the same step
+        float halfBase = spec.wheelbase * 0.5f;
+        float halfTrack = spec.track * 0.5f;
+        float ahead = Terrain.surfaceHeight(x + fx * halfBase, z + fz * halfBase);
+        float behind = Terrain.surfaceHeight(x - fx * halfBase, z - fz * halfBase);
+        float rightH = Terrain.surfaceHeight(x + rightX * halfTrack, z + rightZ * halfTrack);
+        float leftH = Terrain.surfaceHeight(x - rightX * halfTrack, z - rightZ * halfTrack);
+        float slopePitch = (float) Math.atan2(ahead - behind, spec.wheelbase);   // + = nose up
+        float slopeRoll = (float) Math.atan2(rightH - leftH, spec.track);        // + = right side up
+
         // ---- steering: less lock the faster you go, and it straightens up
         //      faster than it winds on, so a twitch does not upset the car
         float speedFrac = Math.min(1f, absV / (spec.topSpeed * 0.62f));
@@ -125,40 +188,85 @@ public class Car {
         float steerRate = spec.steerRate * (winding ? 3.2f : 5.6f);
         steerAngle += (targetSteer - steerAngle) * Math.min(1f, dt * steerRate);
 
-        // ---- engine and brakes
-        float ratio = absV / spec.topSpeed;
-        float resist = spec.enginePower * 0.72f * ratio * ratio + 1.3f + (1f - surface) * 7f;
-        float drive = c.throttle * spec.enginePower * (0.45f + 0.55f * surface);
+        // ---- gearbox and engine
+        updateGearbox(dt, vLong, c);
 
-        // Tyres can only lay down so much. In a low gear the engine easily
-        // beats them, which is where wheelspin comes from.
-        wheelspin = 0f;
-        if (drive > 0f) {
-            float traction = (2.5f + 6.5f * surface) + 6.0f * surface * Math.min(1f, absV / 16f);
-            if (c.handbrake) traction *= 0.35f;
-            if (drive > traction) {
-                wheelspin = Math.min(1f, (drive - traction) / drive);
-                drive = traction + (drive - traction) * 0.15f;
-            }
-        }
+        float speedRatio = absV / spec.topSpeed;
+        // Resistance has to fade out as the car stops, or it acts as static
+        // friction and a parked car sits on a hill instead of rolling down it.
+        float creep = Math.min(1f, absV / 1.5f);
+        float resist = aeroDrag() * speedRatio * speedRatio
+                + ROLLING * (0.15f + 0.85f * creep)
+                + (1f - surface) * 7f * creep;
+        float drive = 0f;
 
-        lockup = 0f;
-        if (c.brake > 0.01f) {
-            if (vLong > 0.6f) {
-                float demand = c.brake * spec.brakePower;
-                float maxBrake = 9.5f * surface;
-                if (demand > maxBrake) {
-                    lockup = Math.min(1f, (demand - maxBrake) / demand);
-                    demand = maxBrake + (demand - maxBrake) * 0.25f;
+        if (airborne) {
+            // Wheels in the air do nothing at all, either way.
+            resist = aeroDrag() * 0.76f * speedRatio * speedRatio;
+        } else {
+            if (inReverse) {
+                // With only two pedals the brake has to be the reverse
+                // throttle, and the throttle has to be the brake — which is
+                // what every player expects from a phone driving game.
+                drive = -c.brake * spec.enginePower * 0.5f * surface * GEAR_RATIO[0] * 0.5f;
+                if (c.throttle > 0.01f) {
+                    if (vLong < -0.6f) {
+                        resist += c.throttle * spec.brakePower * 0.8f;
+                    } else {
+                        inReverse = false;
+                    }
                 }
-                resist += demand;
-                drive = 0f;
+                if (c.brake < 0.05f) resist += engineBraking(GEAR_RATIO[0], creep);
             } else {
-                drive = -c.brake * spec.enginePower * 0.5f * surface;
+                if (!shifting) {
+                    drive = c.throttle * spec.enginePower * torqueAt(engineRevs)
+                            * GEAR_RATIO[gearIndex] * (0.45f + 0.55f * surface);
+                }
+                if (c.throttle < 0.05f) {
+                    resist += engineBraking(GEAR_RATIO[gearIndex], creep);
+                }
             }
-        }
-        if (c.handbrake) {
-            resist += 6f;
+
+            // Tyres can only lay down so much. First gear beats them easily,
+            // which is where wheelspin comes from.
+            wheelspin = 0f;
+            float pull = Math.abs(drive);
+            if (pull > 0f) {
+                // What the tyres can take. Low enough that a powerful car in
+                // first gear overwhelms them and a small hatchback does not.
+                float traction = ((1.6f + 4.0f * surface) + 5.0f * surface * Math.min(1f, absV / 18f))
+                        * (spec.grip / 13f);
+                if (c.handbrake) traction *= 0.35f;
+                if (pull > traction) {
+                    wheelspin = Math.min(1f, (pull - traction) / pull);
+                    float capped = traction + (pull - traction) * 0.15f;
+                    drive = Math.signum(drive) * capped;
+                }
+            }
+
+            lockup = 0f;
+            if (c.brake > 0.01f && !inReverse) {
+                if (vLong > 0.6f) {
+                    float demand = c.brake * spec.brakePower;
+                    float maxBrake = 9.5f * surface;
+                    if (demand > maxBrake) {
+                        lockup = Math.min(1f, (demand - maxBrake) / demand);
+                        demand = maxBrake + (demand - maxBrake) * 0.25f;
+                    }
+                    resist += demand;
+                    drive = 0f;
+                } else {
+                    // Stopped with the brake still down: select reverse.
+                    inReverse = true;
+                }
+            }
+            if (c.handbrake) {
+                resist += 6f;
+            }
+
+            // Gravity down the slope. Uphill drags, downhill pulls you along,
+            // and a parked car rolls back unless the handbrake is on.
+            vLong -= GRAVITY * (float) Math.sin(slopePitch) * dt;
         }
 
         vLong += drive * dt;
@@ -168,9 +276,15 @@ public class Car {
         } else if (vLong < 0f) {
             vLong = Math.min(0f, vLong + scrub);
         }
+        if (c.handbrake && !airborne && Math.abs(vLong) < 1.2f && c.throttle < 0.05f) {
+            vLong = 0f;   // the handbrake holds the car on a hill
+        }
+        if (inReverse && vLong > 0.4f) {
+            inReverse = false;
+        }
 
         float maxForward = spec.topSpeed * (0.58f + 0.42f * surface);
-        float maxReverse = spec.topSpeed * 0.24f;
+        float maxReverse = spec.topSpeed * 0.15f;
         if (vLong > maxForward) vLong = maxForward;
         if (vLong < -maxReverse) vLong = -maxReverse;
 
@@ -187,6 +301,7 @@ public class Car {
         if (c.handbrake) gripRate *= 0.16f;
         gripRate *= (1f - 0.28f * Math.min(1f, absV / spec.topSpeed));
         gripRate *= (1f - 0.45f * wheelspin);
+        if (airborne) gripRate = 0f;
         float latLoss = 1f - (float) Math.exp(-gripRate * dt);
         vLat -= vLat * latLoss;
         if (Math.abs(vLat) > spec.topSpeed * 0.7f) {
@@ -207,6 +322,7 @@ public class Car {
         float transfer = clamp(longAccel / 9f, -1f, 1f);
         yawRate *= (1f - 0.65f * lockup) * (1f - 0.20f * transfer);
         if (c.handbrake) yawRate *= 1.4f;
+        if (airborne) yawRate *= 0.25f;   // a little air steering, no more
         if (yawRate > 2.6f) yawRate = 2.6f;
         if (yawRate < -2.6f) yawRate = -2.6f;
         yaw -= yawRate * dt;
@@ -227,12 +343,9 @@ public class Car {
         updateDrift(dt, slip, absV);
 
         impact = Math.max(0f, impact - dt * 14f);
+        landing = Math.max(0f, landing - dt * 20f);
 
-        // ---- sit on the road, with a little suspension travel
-        float target = Terrain.surfaceHeight(x, z);
-        float follow = Math.min(1f, dt * 9f);
-        suspensionY += (target - suspensionY) * follow;
-        y = suspensionY;
+        updateVertical(dt);
 
         // Spinning wheels race ahead; locked ones stop dead.
         float wheelSurfaceSpeed = vLong * (1f - lockup) + wheelspin * 14f;
@@ -240,28 +353,139 @@ public class Car {
         if (wheelSpin > Math.PI * 2) wheelSpin -= (float) (Math.PI * 2);
         if (wheelSpin < 0) wheelSpin += (float) (Math.PI * 2);
 
-        // ---- attitude: terrain slope plus weight transfer
-        float halfBase = spec.wheelbase * 0.5f;
-        float halfTrack = spec.track * 0.5f;
-        float ahead = Terrain.surfaceHeight(x + fx * halfBase, z + fz * halfBase);
-        float behind = Terrain.surfaceHeight(x - fx * halfBase, z - fz * halfBase);
-        float rightH = Terrain.surfaceHeight(x + rightX * halfTrack, z + rightZ * halfTrack);
-        float leftH = Terrain.surfaceHeight(x - rightX * halfTrack, z - rightZ * halfTrack);
-        float slopePitch = (float) Math.atan2(ahead - behind, spec.wheelbase);   // + = nose up
-        float slopeRoll = (float) Math.atan2(rightH - leftH, spec.track);        // + = right side up
-
-        // Accelerating lifts the nose; in a right-hand bend the body leans out
-        // to the left, so the right-hand side comes up.
+        // ---- attitude: accelerating lifts the nose; in a right-hand bend the
+        //      body leans out to the left, so the right-hand side comes up.
         float squat = clamp(longAccel * 0.009f, -0.075f, 0.075f);
         float lean = clamp(yawRate * vLong * 0.010f, -0.13f, 0.13f);
 
         float blend = Math.min(1f, dt * 7f);
         bodyPitch += (squat - bodyPitch) * blend;
         bodyRoll += (lean - bodyRoll) * blend;
-        visualPitch = slopePitch + bodyPitch;
-        visualRoll = slopeRoll + bodyRoll;
 
-        gear = Math.max(1, Math.min(6, 1 + (int) (absV / (spec.topSpeed / 6f))));
+        if (airborne) {
+            // In the air the car follows its own trajectory, nose up as it
+            // climbs and down as it falls.
+            float flightPitch = (float) Math.atan2(velY, Math.max(4f, Math.abs(vLong)));
+            visualPitch += (flightPitch - visualPitch) * Math.min(1f, dt * 3.5f);
+            visualRoll += (bodyRoll - visualRoll) * Math.min(1f, dt * 2.5f);
+        } else {
+            visualPitch = slopePitch + bodyPitch;
+            visualRoll = slopeRoll + bodyRoll;
+        }
+    }
+
+    /**
+     * Engine braking: strong in a low gear at high revs, almost nothing at
+     * idle. Tying it to revs rather than to the gear alone is what lets a car
+     * roll away down a slope instead of being pinned by its own drivetrain.
+     */
+    private float engineBraking(float ratio, float creep) {
+        return 0.9f * ratio * engineRevs * creep;
+    }
+
+    /**
+     * Aerodynamic drag, scaled so that every car actually reaches the top
+     * speed on its spec sheet. A fixed coefficient would leave the low-powered
+     * ones short: rolling resistance is a fifth of the pickup's budget and
+     * barely a tenth of the GT's.
+     */
+    private float aeroDrag() {
+        float atLimiter = spec.enginePower * torqueAt(1f) * GEAR_RATIO[GEAR_RATIO.length - 1];
+        return Math.max(0.2f, atLimiter * 0.90f - ROLLING);
+    }
+
+    /**
+     * Torque as a fraction of peak, against a fraction of the rev range.
+     * Soft off idle, strongest around two thirds up, tailing off into the
+     * limiter — which is what gives each gear a shape you can hear.
+     */
+    private static float torqueAt(float revs) {
+        float t = clamp(revs, 0f, 1.08f);
+        return (0.55f + 0.75f * t - 0.62f * t * t) / 0.777f;
+    }
+
+    private void updateGearbox(float dt, float vLong, Controls c) {
+        if (shiftTimer > 0f) {
+            shiftTimer -= dt;
+            if (shiftTimer <= 0f) shifting = false;
+        }
+
+        // Revs follow the driven wheels, so spinning them up flares the engine.
+        float wheelSpeed = Math.abs(vLong) + wheelspin * 12f;
+        float ratioSpan = GEAR_RATIO[inReverse ? 0 : gearIndex] / GEAR_RATIO[GEAR_RATIO.length - 1];
+        float target = (wheelSpeed / spec.topSpeed) * ratioSpan;
+        if (target < IDLE_REVS) {
+            target = IDLE_REVS + c.throttle * 0.18f;   // blipping in neutral
+        }
+        engineRevs += (Math.min(target, 1.06f) - engineRevs) * Math.min(1f, dt * 9f);
+
+        if (inReverse || shifting) {
+            gear = 1;
+            return;
+        }
+
+        if (engineRevs > 0.97f && gearIndex < GEAR_RATIO.length - 1) {
+            gearIndex++;
+            shifting = true;
+            shiftTimer = SHIFT_TIME;
+        } else if (engineRevs < 0.42f && gearIndex > 0) {
+            gearIndex--;
+            shifting = true;
+            shiftTimer = SHIFT_TIME * 0.6f;
+        }
+        gear = gearIndex + 1;
+    }
+
+    /**
+     * Vertical motion. The chassis holds a vertical speed rather than being
+     * pinned to the surface, so a ramp throws it and a kerb drops it; the body
+     * then rides on a spring that settles after the landing.
+     */
+    private void updateVertical(float dt) {
+        float ground = Terrain.surfaceHeight(x, z);
+
+        if (airborne) {
+            velY -= GRAVITY * dt;
+            wheelY += velY * dt;
+            airTime += dt;
+            if (wheelY <= ground || airTime > 4f) {
+                landing = Math.max(landing, Math.max(0f, -velY));
+                wheelY = ground;
+                airborne = false;
+                airTime = 0f;
+                bodyVelY -= landing * 0.5f;          // suspension compresses
+                impact = Math.max(impact, landing * 0.45f);
+                // A heavy landing scrubs speed off.
+                float loss = Math.min(0.35f, landing * 0.012f);
+                vx *= (1f - loss);
+                vz *= (1f - loss);
+                forwardSpeed = vx * forwardX() + vz * forwardZ();
+                velY = 0f;
+            }
+        } else {
+            // The vertical speed staying on the surface would imply.
+            float glued = (ground - lastGround) / dt;
+            if (glued < velY - GRAVITY * dt - 1.2f) {
+                // The ground fell away faster than gravity can follow, or a
+                // ramp is still throwing us upward: we are flying.
+                airborne = true;
+                airTime = 0f;
+            } else {
+                velY = glued;
+                wheelY = ground;
+            }
+        }
+        lastGround = ground;
+
+        // Sprung body: stiff enough to stay planted, loose enough to settle.
+        float error = wheelY - bodyY;
+        bodyVelY += (error * 190f - bodyVelY * 21f) * dt;
+        bodyY += bodyVelY * dt;
+        if (bodyY < wheelY - 0.35f) {
+            bodyY = wheelY - 0.35f;
+            bodyVelY = 0f;
+        }
+        y = bodyY;
     }
 
     /** A slide banks its points once the car has been straight for a moment. */
@@ -356,6 +580,11 @@ public class Car {
         return (float) Math.sin(yaw);
     }
 
+    /** How far the body is riding above its wheels, for the camera. */
+    public float suspensionTravel() {
+        return bodyY - wheelY;
+    }
+
     /** Body transform, including the visual lean. */
     public float[] modelMatrix() {
         Matrix.setIdentityM(model, 0);
@@ -375,7 +604,9 @@ public class Car {
         float zOff = front ? spec.wheelbase * 0.5f : -spec.wheelbase * 0.5f;
 
         System.arraycopy(modelMatrix(), 0, wheelModel, 0, 16);
-        Matrix.translateM(wheelModel, 0, sideSign * spec.track * 0.5f, spec.wheelRadius, zOff);
+        // The wheels stay with the ground while the body rides the spring.
+        Matrix.translateM(wheelModel, 0, sideSign * spec.track * 0.5f,
+                spec.wheelRadius - suspensionTravel(), zOff);
         if (front) {
             Matrix.rotateM(wheelModel, 0, (float) -Math.toDegrees(steerAngle), 0f, 1f, 0f);
         }

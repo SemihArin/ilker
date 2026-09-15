@@ -27,7 +27,9 @@ public class Traffic {
 
     private static final class Unit {
         float x, z, y, yaw;
-        float speed;
+        float speed;        // cruising speed it would like to hold
+        float current;      // what it is actually doing
+        boolean braking;
         float wheelSpin;
         float pitch, roll;
         int specIndex;
@@ -86,25 +88,41 @@ public class Traffic {
             if (delta < -maxTurn) delta = -maxTurn;
             u.yaw = wrapAngle(u.yaw + delta);
 
-            // Ease off through the corners, and stay behind the player's bumper.
-            float wanted = u.speed;
+            // Ease off through the corners, and actually slow down for the
+            // player rather than driving through the back of them.
+            float target = u.speed;
+            float ahead = (player.x - u.x) * (float) Math.sin(u.yaw)
+                    + (player.z - u.z) * (float) Math.cos(u.yaw);
+            float beside = Math.abs((player.x - u.x) * -(float) Math.cos(u.yaw)
+                    + (player.z - u.z) * (float) Math.sin(u.yaw));
+            if (ahead > 0f && ahead < 22f && beside < 3.6f) {
+                float room = Math.max(0f, ahead - 6f);
+                target = Math.min(target, room * 0.9f);
+            }
+            // Braking is quicker than getting back on the power.
+            float change = target - u.current;
+            float limit = (change < 0f ? 16f : 5f) * dt;
+            u.current += Math.max(-limit, Math.min(limit, change));
+            if (u.current < 0f) u.current = 0f;
+            u.braking = change < -0.6f;
+
             float corner = 1f - Math.min(0.55f, Math.abs(delta / Math.max(dt, 0.0001f)) * 0.30f);
-            float move = wanted * corner * dt;
+            float move = u.current * corner * dt;
             u.x += (float) Math.sin(u.yaw) * move;
             u.z += (float) Math.cos(u.yaw) * move;
             u.y = Terrain.surfaceHeight(u.x, u.z);
-            u.wheelSpin += (wanted / 0.35f) * dt;
+            u.wheelSpin += (u.current / 0.35f) * dt;
             if (u.wheelSpin > Math.PI * 2) u.wheelSpin -= (float) (Math.PI * 2);
 
             float fx = (float) Math.sin(u.yaw);
             float fz = (float) Math.cos(u.yaw);
             float rightX = -fz;
             float rightZ = fx;
-            float ahead = Terrain.surfaceHeight(u.x + fx * 1.4f, u.z + fz * 1.4f);
+            float noseH = Terrain.surfaceHeight(u.x + fx * 1.4f, u.z + fz * 1.4f);
             float behind = Terrain.surfaceHeight(u.x - fx * 1.4f, u.z - fz * 1.4f);
             float right = Terrain.surfaceHeight(u.x + rightX * 0.8f, u.z + rightZ * 0.8f);
             float left = Terrain.surfaceHeight(u.x - rightX * 0.8f, u.z - rightZ * 0.8f);
-            u.pitch = (float) Math.atan2(ahead - behind, 2.8f);
+            u.pitch = (float) Math.atan2(noseH - behind, 2.8f);
             u.roll = (float) Math.atan2(right - left, 1.6f);
 
             collide(u, player);
@@ -137,6 +155,7 @@ public class Traffic {
             player.forwardSpeed = player.vx * fx + player.vz * fz;
         }
         u.speed *= 0.55f;
+        u.current *= 0.55f;
     }
 
     private void advanceNode(Unit u) {
@@ -183,6 +202,8 @@ public class Traffic {
         u.specIndex = random.nextInt(CarSpec.GARAGE.length);
         u.variant = 1 + random.nextInt(CarModels.VARIANTS - 1);
         u.speed = 11f + random.nextFloat() * 10f;
+        u.current = u.speed;
+        u.braking = false;
         u.pitch = 0f;
         u.roll = 0f;
         setTarget(u);
@@ -218,6 +239,12 @@ public class Traffic {
                 // rather than a row of dark boxes.
                 Mesh head = models.lamp(u.specIndex, CarMesh.LAMP_HEAD);
                 if (head != null) head.draw(program);
+            }
+            if (u.braking) {
+                // Brake lights show in daylight too — that is the point of them.
+                Mesh stop = models.lamp(u.specIndex, CarMesh.LAMP_BRAKE);
+                if (stop != null) stop.draw(program);
+            } else if (night) {
                 Mesh tail = models.lamp(u.specIndex, CarMesh.LAMP_TAIL);
                 if (tail != null) tail.draw(program);
             }

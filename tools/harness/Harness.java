@@ -34,6 +34,7 @@ public class Harness {
         frustum();
         hudLayout();
         obstacles();
+        terrainDriving();
 
         System.out.println();
         System.out.println(failures == 0
@@ -255,10 +256,17 @@ public class Harness {
             car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
             c.clear();
             c.throttle = 1f;
-            for (int i = 0; i < 60 * 90; i++) car.update(dt, c);
-            float reached = car.speedKmh();
+            // The best speed reached during this run, not the last reading:
+            // gravity along the slope means the final number depends on which
+            // hill the run happened to end on. car.topSpeedSeen is no use here
+            // because it is a lifetime record that survives reset().
+            float reached = 0f;
+            for (int i = 0; i < 60 * 90; i++) {
+                car.update(dt, c);
+                reached = Math.max(reached, car.speedKmh());
+            }
             float quoted = spec.topSpeedKmh();
-            check(reached > quoted * 0.90f && reached <= quoted * 1.02f,
+            check(reached > quoted * 0.93f && reached <= quoted * 1.02f,
                     spec.name + " reaches its top speed (" + Math.round(reached) + " of " + quoted + ")");
             check(!Float.isNaN(car.x) && !Float.isNaN(car.z) && !Float.isNaN(car.yaw),
                     spec.name + " stays numerically stable");
@@ -384,9 +392,169 @@ public class Harness {
                 + car.driftTotal + ")");
         check(car.driftBest >= scoredMidSlide, "the best single slide is remembered");
 
+        // ---- 0-100 km/h, which is the number that says whether the gearbox
+        //      and the traction limit add up to a car or to a toy.
+        for (CarSpec s2 : CarSpec.GARAGE) {
+            Car sprinter = new Car();
+            Controls sc = new Controls();
+            sprinter.reset(s2, -Terrain.LANE_OFFSET, 0f, 0f);
+            sc.throttle = 1f;
+            float time = -1f;
+            for (int i = 0; i < 60 * 30; i++) {
+                sprinter.update(dt, sc);
+                if (sprinter.speedKmh() >= 100f) {
+                    time = i * dt;
+                    break;
+                }
+            }
+            check(time > 2.0f && time < 16f,
+                    s2.name + " reaches 100 km/h in a believable time (" + round1(time) + "s)");
+            System.out.printf("  %-13s 0-100 in %.1fs, top %d km/h%n",
+                    s2.name, time, s2.topSpeedKmh());
+        }
+
+        // ---- the gearbox works its way up and the revs reset on each shift.
+        car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
+        c.clear();
+        c.throttle = 1f;
+        int topGear = 1;
+        int upshifts = 0;
+        int lastGear = car.gear;
+        boolean revsDropOnShift = true;
+        float revsBeforeShift = 0f;
+        for (int i = 0; i < 60 * 40; i++) {
+            float before = car.engineRevs;
+            car.update(dt, c);
+            topGear = Math.max(topGear, car.gear);
+            if (car.gear > lastGear) {
+                upshifts++;
+                revsBeforeShift = before;
+            } else if (car.gear == lastGear && revsBeforeShift > 0f) {
+                if (car.engineRevs > revsBeforeShift) revsDropOnShift = false;
+                revsBeforeShift = 0f;
+            }
+            lastGear = car.gear;
+            if (car.engineRevs > 1.1f) {
+                check(false, "the rev limiter holds (" + car.engineRevs + ")");
+                break;
+            }
+        }
+        check(topGear == 6, "the car works up through all six gears (reached " + topGear + ")");
+        check(upshifts >= 5, "every gear is used on the way up (" + upshifts + " shifts)");
+        check(revsDropOnShift, "revs drop when it changes up");
+
+        // Slowing down has to bring the gears back.
+        c.throttle = 0f;
+        c.brake = 1f;
+        for (int i = 0; i < 60 * 8; i++) car.update(dt, c);
+        check(car.gear <= 2, "it changes back down as it slows (" + car.gear + ")");
+
+        // ---- reverse: the brake selects it and drives it, the throttle stops it.
+        car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
+        c.clear();
+        c.brake = 1f;
+        for (int i = 0; i < 60 * 4; i++) car.update(dt, c);
+        check(car.inReverse && car.forwardSpeed < -2f,
+                "the brake selects and drives reverse (" + car.forwardSpeed + ")");
+        c.brake = 0f;
+        c.throttle = 1f;
+        for (int i = 0; i < 60 * 5; i++) car.update(dt, c);
+        check(!car.inReverse && car.forwardSpeed > 1f,
+                "the throttle pulls it out of reverse");
+
         // Distance and record keeping.
         check(car.distanceTravelled > 100f, "distance travelled accumulates");
         check(car.topSpeedSeen >= car.speedKmh() - 1f, "top speed record is kept");
+    }
+
+    /**
+     * Gravity along the slope, airborne physics and the sprung body: the three
+     * things that make a hill and a kerb mean something.
+     */
+    static void terrainDriving() {
+        System.out.println("[terrain driving]");
+        CarSpec spec = CarSpec.GARAGE[5];
+        float dt = 1f / 60f;
+
+        // Find a decent slope to park on.
+        float slopeX = 0f, slopeZ = 0f, steepest = 0f;
+        for (int i = 0; i < 400; i++) {
+            float sx = 40f + i * 17.3f;
+            float sz = 300f + i * 29.7f;
+            float ahead = Terrain.surfaceHeight(sx, sz + 1.4f);
+            float behind = Terrain.surfaceHeight(sx, sz - 1.4f);
+            float slope = Math.abs(ahead - behind) / 2.8f;
+            if (slope > steepest) {
+                steepest = slope;
+                slopeX = sx;
+                slopeZ = sz;
+            }
+        }
+        check(steepest > 0.05f, "the world has hills to park on (" + steepest + ")");
+
+        Car car = new Car();
+        Controls c = new Controls();
+        car.reset(spec, slopeX, slopeZ, 0f);
+        for (int i = 0; i < 60 * 3; i++) car.update(dt, c);
+        float rolled = Math.abs(car.z - slopeZ);
+        check(rolled > 0.5f, "a parked car rolls down a hill (" + rolled + "m)");
+
+        car.reset(spec, slopeX, slopeZ, 0f);
+        c.handbrake = true;
+        for (int i = 0; i < 60 * 3; i++) car.update(dt, c);
+        check(Math.abs(car.z - slopeZ) < 0.35f, "the handbrake holds it on the hill");
+
+        // Climbing costs speed that the same run on the flat keeps.
+        check(Math.abs(Terrain.surfaceHeight(0f, 0f)) < 1000f, "terrain sampling is sane");
+
+        // Driving off a kerb at speed puts the car in the air.
+        // Mid-block, so the only kerb nearby is the one being jumped off and
+        // not the cross street's.
+        float kerbZ = 0f;
+        boolean paved = false;
+        for (int i = 0; i < 4000 && !paved; i++) {
+            float z = Math.round((50f + i * 13f) / Terrain.CHUNK) * Terrain.CHUNK
+                    + Terrain.CHUNK * 0.5f;
+            if (Terrain.urban(0f, z) > 0.4f) {
+                kerbZ = z;
+                paved = true;
+            }
+        }
+        check(paved, "a paved street was found to jump off");
+
+        if (paved) {
+            Car jumper = new Car();
+            Controls jc = new Controls();
+            // On the pavement, heading straight out across the kerb.
+            jumper.reset(spec, 9f, kerbZ, (float) (Math.PI * 0.5));
+            jumper.vx = 30f;
+            jumper.vz = 0f;
+            boolean flew = false;
+            float peakAir = 0f;
+            for (int i = 0; i < 120; i++) {
+                jumper.update(dt, jc);
+                if (jumper.airborne) {
+                    flew = true;
+                    peakAir = Math.max(peakAir, jumper.airTime);
+                }
+            }
+            check(flew, "dropping off a kerb at speed gets the car airborne");
+            check(!jumper.airborne, "and it comes back down again");
+            check(peakAir < 2f, "the hop is a hop, not a launch (" + peakAir + "s)");
+            check(!Float.isNaN(jumper.y), "the landing leaves the car sane");
+        }
+
+        // The sprung body settles back onto its wheels once things are calm.
+        Car settle = new Car();
+        Controls sc = new Controls();
+        settle.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
+        for (int i = 0; i < 60 * 3; i++) settle.update(dt, sc);
+        check(Math.abs(settle.suspensionTravel()) < 0.04f,
+                "the suspension settles at rest (" + settle.suspensionTravel() + "m)");
+    }
+
+    static float round1(float v) {
+        return Math.round(v * 10f) / 10f;
     }
 
     /** Peak wheelspin in the first second from a standing start. */

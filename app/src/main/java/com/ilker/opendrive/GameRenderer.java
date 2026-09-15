@@ -73,6 +73,7 @@ public class GameRenderer implements GLSurfaceView.Renderer {
     private int lightMode;       // 0 auto, 1 dipped, 2 main, 3 off
     private float camShake;
     private float shakeTime;
+    private boolean wasAirborne;
     private final Vibrator vibrator;
     private boolean tiltEnabled;
     private float timeOfDay = 0.34f;
@@ -264,6 +265,8 @@ public class GameRenderer implements GLSurfaceView.Renderer {
         obstacles.refresh(car.x, car.z);
         float bump = car.resolveObstacles(obstacles);
         if (bump > 1.5f) thump(bump);
+        if (wasAirborne && !car.airborne) thump(car.landing * 0.8f);
+        wasAirborne = car.airborne;
         skid.follow(car);
         traffic.update(dt, car);
         world.update(car.x, car.z);
@@ -273,25 +276,18 @@ public class GameRenderer implements GLSurfaceView.Renderer {
 
         updateCamera(dt);
 
-        // Revs climb through each gear and drop on the shift, which is what
-        // makes a synthesised engine read as an engine.
-        float speedRatio = Math.min(1f, Math.abs(car.forwardSpeed) / car.spec.topSpeed);
-        float withinGear = speedRatio * 6f;
-        float revs = withinGear - (float) Math.floor(withinGear);
-        revs = 0.20f + 0.78f * revs;
-        if (speedRatio < 0.02f) {
-            revs = 0.10f + controls.throttle * 0.55f;
-        }
-        if (car.wheelspin > 0.2f) {
-            // Spinning wheels rev past whatever the road speed suggests.
-            revs = Math.min(1f, revs + car.wheelspin * 0.45f);
-        }
+        // The engine note comes straight off the gearbox now, so the shifts
+        // you hear are the shifts the car is actually making.
         float load = Math.max(controls.throttle, Math.min(1f, Math.abs(car.forwardSpeed) / 14f));
         float squeal = Math.max(car.wheelspin,
                 Math.max(car.lockup * 0.9f,
                         Math.min(1f, Math.max(0f, Math.abs(car.slipAngle) - 0.14f) * 4.5f)));
         if (Math.abs(car.forwardSpeed) < 1.5f && car.wheelspin < 0.05f) squeal = 0f;
-        engine.setState(revs, load);
+        if (car.airborne) {
+            squeal = 0f;
+            load = controls.throttle;
+        }
+        engine.setState(car.engineRevs, load);
         engine.setSlip(squeal);
 
         if (messageHold > 0f) {
@@ -390,7 +386,8 @@ public class GameRenderer implements GLSurfaceView.Renderer {
         // bonnet camera gets more of it — it is bolted to the car, after all.
         float rough = speedFrac * speedFrac * 0.30f
                 + (1f - Terrain.surfaceGrip(car.x, car.z)) * 0.55f * Math.min(1f, speedFrac * 2.5f)
-                + Math.min(1f, car.impact * 0.10f);
+                + Math.min(1f, car.impact * 0.10f)
+                + Math.min(1f, car.landing * 0.09f);
         camShake += (rough - camShake) * Math.min(1f, dt * 9f);
         shakeTime += dt;
         float amount = camShake * (cameraMode == 1 ? 0.16f : 0.10f);
@@ -497,8 +494,11 @@ public class GameRenderer implements GLSurfaceView.Renderer {
         }
 
         // Lit lenses are separate meshes, so the car can show what it is doing.
-        boolean reversing = car.forwardSpeed < -0.5f;
-        boolean braking = controls.brake > 0.5f && !reversing;
+        // In reverse the pedals swap roles, so the lamps have to follow.
+        boolean reversing = car.inReverse;
+        boolean braking = reversing
+                ? (controls.throttle > 0.5f && car.forwardSpeed < -0.3f)
+                : controls.brake > 0.5f;
         Matrix.multiplyMM(mvp, 0, viewProj, 0, model, 0);
         scene.setMatrices(mvp, model);
         if (lightsOn) drawLamp(CarMesh.LAMP_HEAD);
