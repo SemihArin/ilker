@@ -1,0 +1,65 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Optional release signing. Create a keystore.properties file in the project root with
+//   storeFile=/abs/path/to/your.jks
+//   storePassword=...
+//   keyAlias=...
+//   keyPassword=...
+// to sign release builds with your own key. Without it, release falls back to the
+// debug key so that `./gradlew assembleRelease` always works out of the box.
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+def hasReleaseKey = false
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+    hasReleaseKey = keystoreProps.getProperty("storeFile") != null
+}
+
+android {
+    namespace 'com.ilker.opendrive'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.ilker.opendrive"
+        minSdk 21
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+    }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile file(keystoreProps.getProperty("storeFile"))
+                storePassword keystoreProps.getProperty("storePassword")
+                keyAlias keystoreProps.getProperty("keyAlias")
+                keyPassword keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            signingConfig hasReleaseKey ? signingConfigs.release : signingConfigs.debug
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            applicationIdSuffix ".debug"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packagingOptions {
+        resources {
+            excludes += ['META-INF/**']
+        }
+    }
+}

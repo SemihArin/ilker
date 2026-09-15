@@ -1,0 +1,17 @@
+# Android / Gradle
+*.iml
+.gradle/
+build/
+local.properties
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Signing material never belongs in the repository
+keystore.properties
+*.jks
+*.keystore
+
+# Off-device harness build output
+tools/harness/out/
