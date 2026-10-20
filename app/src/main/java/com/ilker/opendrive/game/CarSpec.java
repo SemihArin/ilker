@@ -5,10 +5,11 @@ package com.ilker.opendrive.game;
  * the procedural body builder and a handful of handling figures — so adding a
  * new one never needs an art asset.
  *
- * Handling is described per axle rather than as one grip number, because that
- * is what decides whether a car understeers or oversteers — and a car whose
- * rear axle is the weaker of the two is unstable above a critical speed, which
- * no amount of driving recovers. {@link #balance} is that check.
+ * Handling is described the way a car actually has it: what its tyres grip,
+ * where its weight sits, and how high that weight is. The forces follow from
+ * those, so a car cannot be given a combination that is quietly unstable — the
+ * load that decides what an axle can do also decides how hard it resists being
+ * pushed, which is what makes a car neutral by default.
  *
  * Local axes: +X right, +Y up, +Z forward. The origin sits on the road surface
  * between the wheels.
@@ -43,12 +44,18 @@ public class CarSpec {
     public final float topSpeed;     // m/s
     public final float enginePower;  // drive force at peak torque in a 1:1 gear
     public final float brakePower;   // m/s^2
-    /** Peak lateral acceleration the front axle can contribute, m/s^2. */
-    public final float gripFront;
-    /** The same for the rear. Below the front, the car wants to oversteer. */
-    public final float gripRear;
+    /** What the tyres hold sideways, as a multiple of gravity. 1.0 is sticky. */
+    public final float grip;
+    /**
+     * The car's one deliberate handling bias: taken off the front tyres and
+     * added to the rear, so a positive number means the front lets go first
+     * and the car runs wide instead of swapping ends. Keep it small.
+     */
+    public final float balance;
     /** Share of the weight over the front axle; above 0.5 is nose-heavy. */
     public final float frontWeight;
+    /** Height of the centre of mass, metres — how much weight moves under load. */
+    public final float cgHeight;
     /** Maximum steering angle in radians, at parking speed. */
     public final float steerLock;
     public final float steerRate;
@@ -61,7 +68,7 @@ public class CarSpec {
                     float wheelRadius, float wheelWidth, float wheelbase, float track,
                     boolean spoiler, boolean pickupBed, boolean roofRack,
                     float topSpeed, float enginePower, float brakePower,
-                    float gripFront, float gripRear, float frontWeight,
+                    float grip, float balance, float frontWeight, float cgHeight,
                     float steerLock, float steerRate,
                     float colorR, float colorG, float colorB) {
         this.name = name;
@@ -86,9 +93,10 @@ public class CarSpec {
         this.topSpeed = topSpeed;
         this.enginePower = enginePower;
         this.brakePower = brakePower;
-        this.gripFront = gripFront;
-        this.gripRear = gripRear;
+        this.grip = grip;
+        this.balance = balance;
         this.frontWeight = frontWeight;
+        this.cgHeight = cgHeight;
         this.steerLock = steerLock;
         this.steerRate = steerRate;
         this.colorR = colorR;
@@ -103,8 +111,8 @@ public class CarSpec {
                     0.70f, 0.76f, 0.10f, -0.66f, 0.24f, -0.20f,
                     0.34f, 0.30f, 2.66f, 1.66f,
                     true, false, false,
-                    64f, 3.30f, 15f,
-                    6.20f, 6.39f, 0.53f, 0.92f, 3.4f,
+                    64f, 3.30f, 12.0f,
+                    1.00f, 0.05f, 0.53f, 0.46f, 0.63f, 3.4f,
                     0.93f, 0.28f, 0.06f),
 
             // Short, sharp and nimble through a set of bends.
@@ -112,8 +120,8 @@ public class CarSpec {
                     0.68f, 0.72f, 0.06f, -0.70f, 0.26f, -0.22f,
                     0.32f, 0.27f, 2.42f, 1.58f,
                     true, false, false,
-                    69f, 3.00f, 16f,
-                    6.00f, 6.44f, 0.52f, 0.88f, 3.8f,
+                    69f, 3.00f, 12.0f,
+                    0.98f, 0.05f, 0.52f, 0.45f, 0.66f, 3.8f,
                     0.20f, 0.62f, 0.92f),
 
             // Long bonnet, big engine, happier on a straight than a corner.
@@ -121,8 +129,8 @@ public class CarSpec {
                     0.74f, 0.78f, -0.02f, -0.74f, 0.24f, -0.26f,
                     0.36f, 0.31f, 2.92f, 1.70f,
                     true, false, false,
-                    71f, 3.10f, 14f,
-                    5.60f, 5.39f, 0.55f, 0.80f, 2.8f,
+                    71f, 3.10f, 11.5f,
+                    0.92f, 0.04f, 0.55f, 0.50f, 0.58f, 2.8f,
                     0.10f, 0.11f, 0.14f),
 
             // The fast one: most power, most grip, highest top speed.
@@ -130,8 +138,8 @@ public class CarSpec {
                     0.66f, 0.74f, 0.16f, -0.62f, 0.26f, -0.18f,
                     0.33f, 0.26f, 2.58f, 1.60f,
                     true, false, false,
-                    77f, 4.10f, 19f,
-                    6.60f, 7.55f, 0.51f, 0.70f, 3.0f,
+                    77f, 4.10f, 13.0f,
+                    1.08f, 0.04f, 0.51f, 0.42f, 0.60f, 3.0f,
                     0.86f, 0.13f, 0.14f),
 
             // The sensible one. Nothing it does will surprise you.
@@ -139,8 +147,8 @@ public class CarSpec {
                     0.74f, 0.78f, 0.20f, -0.66f, 0.22f, -0.10f,
                     0.34f, 0.25f, 2.72f, 1.58f,
                     false, false, false,
-                    60f, 2.20f, 15f,
-                    5.40f, 4.97f, 0.57f, 0.62f, 2.6f,
+                    60f, 2.20f, 11.0f,
+                    0.88f, 0.07f, 0.57f, 0.54f, 0.62f, 2.6f,
                     0.24f, 0.55f, 0.36f),
 
             // Tall, planted, unbothered by kerbs and slow to turn in.
@@ -148,8 +156,8 @@ public class CarSpec {
                     0.80f, 0.86f, 0.30f, -0.70f, 0.16f, -0.05f,
                     0.40f, 0.30f, 2.82f, 1.66f,
                     false, false, true,
-                    58f, 2.00f, 15f,
-                    4.90f, 4.87f, 0.56f, 0.60f, 2.3f,
+                    58f, 2.00f, 10.0f,
+                    0.78f, 0.08f, 0.56f, 0.72f, 0.60f, 2.3f,
                     0.16f, 0.32f, 0.52f),
 
             // Slow, but short enough to be the most agile thing at a junction.
@@ -157,8 +165,8 @@ public class CarSpec {
                     0.78f, 0.80f, 0.26f, -0.80f, 0.20f, -0.12f,
                     0.31f, 0.22f, 2.35f, 1.48f,
                     false, false, false,
-                    47f, 1.90f, 14f,
-                    5.30f, 4.40f, 0.61f, 0.66f, 3.2f,
+                    47f, 1.90f, 10.5f,
+                    0.86f, 0.08f, 0.61f, 0.54f, 0.68f, 3.2f,
                     0.96f, 0.72f, 0.10f),
 
             // Open bed, heavy, steady. Happy on dirt.
@@ -166,8 +174,8 @@ public class CarSpec {
                     0.82f, 0.94f, 0.06f, -0.52f, 0.18f, -0.04f,
                     0.40f, 0.32f, 3.15f, 1.70f,
                     false, true, false,
-                    51f, 1.75f, 13f,
-                    4.80f, 4.24f, 0.58f, 0.58f, 2.1f,
+                    51f, 1.75f, 10.0f,
+                    0.80f, 0.06f, 0.58f, 0.68f, 0.56f, 2.1f,
                     0.90f, 0.90f, 0.88f),
     };
 
@@ -176,12 +184,8 @@ public class CarSpec {
         return Math.round(topSpeed * 3.6f);
     }
 
-    /**
-     * Static balance. Below one the car understeers and is stable; at one it
-     * is neutral; above one it is unstable and will spin above a critical
-     * speed whatever the player does, which is never what anybody wants.
-     */
-    public float balance() {
-        return (gripFront * (1f - frontWeight) / frontWeight) / gripRear;
+    /** Steady cornering the tyres can hold on dry tarmac, in m/s^2. */
+    public float corneringLimit() {
+        return grip * 9.81f;
     }
 }

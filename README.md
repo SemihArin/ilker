@@ -16,7 +16,7 @@ Bu yüzden APK sadece **96 KB**.
 
 ## Kurulum
 
-`dist/ilker-drive-1.6.apk` dosyasını telefonuna kopyala ve aç. Android
+`dist/ilker-drive-1.7.apk` dosyasını telefonuna kopyala ve aç. Android
 "bilinmeyen kaynaklardan yükleme" izni isteyecek; tarayıcına veya dosya
 yöneticine bu izni ver.
 
@@ -42,28 +42,46 @@ ortası bilerek boş bırakıldı — bakman gereken yer orası.
 
 ## Sürüş
 
-Buradaki temel kural şu: **araç sürüldüğünde oturur.** Virajı lastiklerine
-yaslanarak alır, savrulmaz.
+Fizik elle ayarlanmış tutuş sayılarından değil, **aks yüklerinden** türüyor.
+Her aksın taşıdığı ağırlık var; hızlanınca ve frende ağırlık akslar arasında
+geçiyor; bir aksın yanal olarak yapabileceği şey, taşıdığı yük çarpı lastik
+sürtünmesi. Bunun önemi şu: yükü belirleyen şey aynı zamanda aksın itilmeye ne
+kadar direndiğini de belirliyor, yani araç **varsayılan olarak nötr**. Elle
+ayarlanmış iki sayıdan kazara kararsız bir araç çıkması mümkün değil.
 
-Araç iki akslı bir lastik modeliyle sürülüyor. Ön ve arka aksın kendi kayma
-açısı, kendi tutuş tavanı var; dönme hızı ise direksiyonun bir fonksiyonu değil,
-kendi ataleti olan gerçek bir durum. Yani araç dönmeye başladığında o dönüşü
-bir an taşır — viraja giriş ve çıkış anlık değil, bir ağırlığı var.
+Her aracın tek bir **denge** eğilimi var: önden alınıp arkaya eklenen küçük bir
+miktar. Araç limitte önce önden kayıyor, yani dışarı açılıyor — kıç atmıyor.
 
-Her aracın **dengesi** ölçülüyor: ön aksın taşıdığı ağırlığa göre tutuşu, arka
-aksınkini geçerse araç belli bir hızın üstünde ne yaparsan yap fırıl döner.
-Garajdaki sekiz aracın hepsi bu sınırın rahat tarafında — testler bunu her
-derlemede 384 ayrı koşuyla doğruluyor.
+**Direksiyon bir açı değil, bir viraj isteğidir.** Çubuğu yarıya bastığında
+araç sahip olduğu yanal kuvvetin yarısını çekiyor; hangi hızda olursan ol.
+Ölçümle: 22 m/s'te 0.2 çubuk 0.22 g, 0.4 çubuk 0.51 g, 0.6 çubuk 0.78 g, tam
+çubuk 0.96 g. Bu, önceki sürümlerin en büyük hatasının karşılığı — orada çubuk
+doğrudan direksiyon açısına eşleniyordu, yarım direksiyon zaten lastiklerin
+verebileceğinden fazlasını istiyordu, dolayısıyla yarımla tam arasında hiçbir
+fark yoktu ve direksiyon bir aç/kapa anahtarı gibiydi.
 
-**Direksiyon hıza göre kısılıyor.** Park etmeni sağlayan kilit, 120 km/s'te
-aracı savurmaktan başka işe yaramaz; gerçek sürücü o hızda iki üç derece
-kullanır. Yüksek hızda ince düzeltme yapabilirsin, park ederken tam kilidin
-elinde olur.
+Sabit bir virajın gerektirdiği açı yaklaşık `kuvvet × dingil mesafesi / hız²`.
+Park ederken bu kilidin tamamı, otoyolda birkaç derece. Oyuncuya verilen tam
+olarak bu — artı lastiklerin o kuvveti üretmek için ihtiyaç duyduğu kayma payı.
+Sonuç: **tam çubuk her hızda "bu aracın yapabileceği en dar viraj"** demek.
+ATMACA 8 m/s'te 7 metre, 22 m/s'te 51 metre, 42 m/s'te 182 metre yarıçapla
+dönüyor — yani R = v²/a, kitaptaki gibi.
+
+Lastik eğrisi 9.3 derecede tepe yapıp sonra düşüyor. Direksiyon sınırı, ön
+lastiği tam o tepeye getirecek kadar açı veriyor; **tepeyi aşacak kadar değil.**
+Eskiden ön lastik 13-14 derecede, yani eğrinin düşen tarafında çalışıyordu:
+direksiyonu kırdıkça araç daha az dönüyordu.
+
+**Frenler lastiği yenemez.** Fren, motor freni ve yuvarlanma direncinin hepsi
+aynı lastiklerden geçtiği için tek bir bütçeye konuluyor ve o bütçe `tutuş × g`
+ile sınırlı. Hava direnci lastikten geçmediği için onun dışında ve
+sınırlanmıyor. Teker kilitlendiğinde kayan lastik daha *az* tutuyor, daha çok
+değil. Sonuç: 100-0 mesafesi 36 ile 49 metre arası — gerçek araçlar 36-42.
 
 Motor **gerçek bir şanzımandan** çekiyor: bir tork eğrisi, içinde bulunduğu
-vitesin oranıyla çarpılıyor. Vites değişiminde tork kesilir ve devir düşer —
-duyduğun vites değişimi aracın gerçekten yaptığı vites değişimi. GT 3.6
-saniyede 100'e çıkarken hatchback 9.6 saniye alıyor.
+vitesin oranıyla çarpılıyor. Vites değişiminde tork kesilir ve devir düşer.
+Çekiş de tutuşa bağlı: arka aksın yükü çarpı lastik sürtünmesi, artı tam gazda
+üstüne binen çökme.
 
 Gövde zemine yapışık değil: kendi dikey hızını taşıyor. **Kaldırımdan hızlı
 inersen araç havalanır**, yerçekimi geri indirir, yaylar oturur. Yerçekimi
@@ -72,43 +90,37 @@ ve el freni çekmezsen park ettiğin araç geri kaçar.
 
 Bunun yanında:
 
-- **Ağırlık transferi** — gaza ve frene göre; hava direncine göre değil. Bu
-  ayrım önemli: net ivmeden hesaplanınca otoyol hızında sırf hava direnci aracı
-  burnuna yatırıp arkayı hafifletiyor ve en ufak direksiyonda savuruyor.
+- **Ağırlık transferi** — gaza ve frene göre, ağırlık merkezi yüksekliğiyle
+  ölçeklenerek. SUV'un yüksek merkezi onu frende daha çok öne yatırıyor.
 - **Sürtünme dairesi** — aracı ileri itmek için harcanan tutuş, onu döndürmek
   için kalmaz. İki aksa birden uygulanıyor, yani tam gaz dengeyi bozmaz.
 - **Patinaj** — güçlü araçlarda dururken tam gaz lastikleri döndürür.
 - **Fren kilitlenmesi** — sert frende tekerler kilitlenir, direksiyon işlemez
   olur ve ön lastikler iz bırakır.
-- **Lastik izleri** — kayan ve patinaj yapan tekerler yola gerçekten iz bırakır.
-- **Çarpışma** — binalara, ağaçlara, kayalara ve sokak lambalarına çarpılır.
-- **Işıklar** — iki ayrı far konisi, fren lambası, geri vites lambası, gece
-  yanan sokak lambası havuzları ve trafikteki araçların farları.
-- **Ses** — kayan lastiğin ciyaklaması, patinajda yükselen devir.
-- **Kamera** — hızda, bozuk zeminde ve sert inişlerde titrer.
-- **Trafik** — önündeki araç senin için yavaşlar ve stop lambaları yanar.
-- **Geri vites** — dururken frene basınca geri vites seçilir; geri viteste
-  fren pedalı gaz, gaz pedalı fren olur.
+- **Lastik izleri**, **çarpışma**, **far konileri**, **lastik ciyaklaması**,
+  **kamera titreşimi**, **trafik**, **geri vites**.
 
 ## Garaj
 
-Sekiz aracın hepsi `CarSpec.GARAGE` içindeki sayılarla tanımlı. Yeni bir araç
-eklemek için tek yapman gereken o diziye bir satır daha yazmak.
+Sekiz aracın hepsi `CarSpec.GARAGE` içindeki sayılarla tanımlı: lastik
+sürtünmesi, ağırlık dağılımı, ağırlık merkezi yüksekliği, dingil mesafesi,
+direksiyon kilidi, güç. Kuvvetler bunlardan türediği için yeni bir araç
+eklerken kararlılık hesabı yapman gerekmiyor — model onu kendisi halleder.
 
-`DENGE` aracın kararlılığı: 1'in altında araç kararlıdır, 1'e yaklaştıkça
-çevikleşir, 1'i geçerse kurtarılamaz biçimde savrulur — o yüzden hiçbiri
-geçmiyor, test de bunu zorluyor.
+`TUTUŞ` lastiğin yanal sürtünmesi, `YANAL` ise aracın gerçekten çektiği ivme;
+ikisinin birbirine yakın olması direksiyonun tutuşu boşa harcamadığı anlamına
+geliyor. `YARIÇAP` 22 m/s'te tam direksiyonla çizdiği daire.
 
-| Araç | 0-100 | Son hız | Denge | Karakter |
-|---|---|---|---|---|
-| ATMACA COUPE | 4.5 sn | 230 km/s | 0.86 | Alçak ve hafif; yön değiştirmekte en çevik olanı |
-| FIRTINA RS | 4.3 sn | 248 km/s | 0.86 | Kısa, keskin, virajlı yolda oynak |
-| KAS MUSCLE | 4.2 sn | 256 km/s | 0.85 | Uzun kaput, büyük motor; düzlüğü virajdan çok sever |
-| SIMSEK GT | 3.6 sn | 277 km/s | 0.84 | Hızlısı: en çok güç, en çok tutuş, en yüksek son hız |
-| KLASIK SEDAN | 6.5 sn | 216 km/s | 0.82 | Aklı başında olan; hiçbir hareketi seni şaşırtmaz |
-| KARTAL SUV | 7.4 sn | 209 km/s | 0.79 | Yüksek, sağlam, kaldırımdan korkmaz, geç döner |
-| MINIK HATCH | 9.6 sn | 169 km/s | 0.77 | Yavaş ama kısa; kavşak hızında en çevik olanı |
-| YUK PICKUP | 9.6 sn | 184 km/s | 0.82 | Açık kasa, ağır, sakin. Toprakta rahat |
+| Araç | Tutuş | Yanal | 0-100 | Son hız | 100-0 | Yarıçap @22 m/s |
+|---|---|---|---|---|---|---|
+| ATMACA COUPE | 1.00 | 0.96 g | 5.2 sn | 230 km/s | 38 m | 51 m |
+| FIRTINA RS | 0.98 | 0.94 g | 5.0 sn | 248 km/s | 39 m | 52 m |
+| KAS MUSCLE | 0.92 | 0.89 g | 5.5 sn | 256 km/s | 42 m | 56 m |
+| SIMSEK GT | 1.08 | 1.06 g | 4.3 sn | 277 km/s | 36 m | 47 m |
+| KLASIK SEDAN | 0.88 | 0.83 g | 7.2 sn | 216 km/s | 44 m | 60 m |
+| KARTAL SUV | 0.78 | 0.71 g | 8.2 sn | 209 km/s | 49 m | 69 m |
+| MINIK HATCH | 0.86 | 0.81 g | 10.1 sn | 169 km/s | 44 m | 61 m |
+| YUK PICKUP | 0.80 | 0.76 g | 10.0 sn | 184 km/s | 48 m | 65 m |
 
 ## Derleme
 
@@ -148,7 +160,7 @@ dosyalarını** masaüstü JVM'de derleyip çalıştırır (`android.opengl.Matr
 yerine birebir aynı davranan bir kopya konur):
 
 ```bash
-tools/harness/run.sh            # 227 kontrol
+tools/harness/run.sh            # 405 kontrol
 tools/harness/run.sh --preview  # kontroller + docs/*.png görüntülerini yeniden üretir
 ```
 
@@ -164,13 +176,23 @@ küçültmesi, her aracın 0-100 süresinin inandırıcı bir aralıkta olması,
 park eden aracın geri kaçması ve el freninin onu tutması, kaldırımdan hızlı
 inen aracın havalanıp geri inmesi, süspansiyonun dururken oturması.
 
-**Kararlılık testleri** en önemlisi, çünkü eksikliği gerçek bir hatayı
-gizlemişti: sekiz aracın her biri, dört ayrı hızda, dört ayrı direksiyon
-miktarında ve üç ayrı gaz konumunda — 384 kombinasyon — virajı kaymadan alıyor
-mu diye bakıyor. Ayrıca her aracın yapısal olarak kararlı olduğu (arka aksın
-taşıdığı yüke göre tutuşunun yeterli olduğu), tam gazda dümdüz gittiği, viraj
-ortasında gaz kesilince ters dönmediği ve direksiyonun hızla kısıldığı
-doğrulanıyor.
+**Dönüş testleri** her aracı beş hızda ölçüyor: tam direksiyonun aracın sahip
+olduğu tutuşu gerçekten kullandığı (ve aşmadığı), yarıçapın hızla birlikte
+büyüdüğü, kavşak hızında dar dönebildiği, yarım direksiyonun yarım viraj
+verdiği (yani direksiyonun ortasının çalıştığı), ön lastiğin kendi tepe
+noktasının ötesine itilmediği, limitte önce önün kaydığı ve aracın direksiyona
+yarım saniyenin altında cevap verdiği.
+
+Bu testler yazılmadan önce araçlar sahip oldukları tutuşun ancak yarısını
+kullanıyordu: direksiyon sınırı ön lastiği eğrinin düşen tarafına itiyordu,
+yani daha çok kırmak daha az viraj demekti. Ve yarım direksiyon zaten virajın
+%80'ini veriyordu, yani direksiyonun ortası yoktu.
+
+**Kararlılık testleri**: sekiz aracın her biri, dört ayrı hızda, dört ayrı
+direksiyon miktarında ve üç ayrı gaz konumunda — 384 kombinasyon — virajı
+savrulmadan alıyor mu. Ayrıca her aracın öne doğru denge eğilimi taşıdığı, tam
+gazda dümdüz gittiği, viraj ortasında gaz kesilince ters dönmediği ve el
+freninin aracı yana atmadığı doğrulanıyor.
 
 Bu testler yazılmadan önce **sekiz aracın sekizi de her hızda fırıl dönüyordu**;
 0.25 direksiyon bile yetiyordu. O zamanki testler yalnızca araçları birbiriyle

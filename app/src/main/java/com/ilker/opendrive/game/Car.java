@@ -8,13 +8,18 @@ import com.ilker.opendrive.world.Terrain;
 /**
  * Arcade vehicle model: a two-axle tyre model with real yaw inertia.
  *
- * Cornering is a two-axle model: each axle gets its own slip angle, its own
- * lateral force from a tyre curve that peaks and then eases off, and the
- * difference between the two is a torque about the car's centre. The yaw rate
- * is therefore a state with inertia, not a function of the steering angle —
- * which is what lets the back step out, carry round, and be caught on opposite
- * lock. A car whose rear tyres give up before its fronts oversteers; loading
- * the rear axle with power steals the grip it was using to hold the line.
+ * Cornering is a bicycle model driven by axle load. Each axle carries a share
+ * of the car's weight, load moves between them under acceleration and braking,
+ * and what an axle can do sideways is that load times the tyre's friction. Its
+ * slip angle feeds a curve that rises to a peak and eases off after it, and the
+ * difference between the two axles' forces is a torque about the car's centre,
+ * so yaw rate is a state with inertia rather than a function of the wheel.
+ *
+ * Deriving grip from load rather than from a pair of hand-set numbers is what
+ * makes the car behave: a car is neutral when both axles run the same tyre,
+ * because the load that decides the force also decides the stiffness that
+ * resists it. Understeer is then one small deliberate bias, not an accident of
+ * two figures somebody tuned.
  *
  * Longitudinally the engine drives through a real gearbox — a torque curve
  * multiplied by the gear the car happens to be in — so first gear overwhelms
@@ -40,13 +45,27 @@ public class Car {
     private static final float IDLE_REVS = 0.12f;
     /** Rolling resistance. Small — it is tyres on tarmac, not a handbrake. */
     private static final float ROLLING = 0.35f;
-    /** How much opposite lock the car winds on by itself, 0..1. */
     /** Sub-steps for the lateral solver; the tyres are stiff at low speed. */
     private static final int LATERAL_STEPS = 4;
-    /** How fast the car can rotate, rad/s. Low enough to leave a thumb time. */
-    private static final float YAW_MAX = 2.35f;
-    /** Rotation decays on its own, so a slide settles instead of running away. */
-    private static final float YAW_DAMPING = 0.20f;
+    /** A ceiling on rotation. Loose enough that ordinary driving never meets it. */
+    private static final float YAW_MAX = 3.4f;
+
+    // ---- the tyre. One curve, shared by both axles, scaled by the load each
+    //      of them happens to be carrying.
+
+    /** Magic-formula shape: how far the curve falls away past its peak. */
+    private static final float TYRE_SHAPE = 1.45f;
+    /** Magic-formula stiffness: how sharply it climbs to that peak. */
+    private static final float TYRE_STIFF = 11.5f;
+    /** Where the peak lands, radians. Follows from the two above. */
+    private static final float PEAK_SLIP = 0.163f;
+
+    /**
+     * How much steering is offered past the angle a limit-speed corner needs.
+     * Enough that full input reaches the tyre's peak, little enough that it
+     * does not sail past it into understeer.
+     */
+    private static final float STEER_MARGIN = 0.45f;
 
     public CarSpec spec;
 
@@ -198,19 +217,33 @@ public class Car {
         float slopePitch = (float) Math.atan2(ahead - behind, spec.wheelbase);   // + = nose up
         float slopeRoll = (float) Math.atan2(rightH - leftH, spec.track);        // + = right side up
 
-        // ---- steering. The lock that makes a car park is far more than it
-        //      can survive at speed: at 120 km/h a real driver uses two or
-        //      three degrees, and handing the player thirty is a spin every
-        //      time the thumb moves. So the available lock falls away with
-        //      speed — which is what makes the car feel planted.
-        float speedFactor = 0.10f + 0.90f / (1f + absV / 4.5f);
+        // ---- steering. What the player is asking for with the wheel is a
+        //      corner, not an angle, so that is what the input means here: at
+        //      half deflection the car pulls half the cornering force it has,
+        //      at any speed. Mapping the thumb straight onto a steering angle
+        //      instead makes the middle of the travel useless — half a turn
+        //      already asks for more than the tyres have, so the car corners
+        //      the same from half input to full and the wheel feels like a
+        //      switch.
+        //
+        //      A steady turn at a given force needs an angle of about
+        //      (force * wheelbase / speed squared), which is most of the lock
+        //      when parking and a couple of degrees on a motorway. The tyres
+        //      also need some slip of their own to make that force, and they
+        //      need most of it only near the limit — hence the squared term.
+        float demand = Math.abs(c.steer);
+        float capability = spec.grip * surface * GRAVITY;
+        float geometric = demand * capability * spec.wheelbase
+                / Math.max(absV * absV, 1f);
+        float slipNeeded = PEAK_SLIP * STEER_MARGIN * demand * demand;
+        float maxSteer = Math.min(spec.steerLock, geometric + slipNeeded);
 
         // If the car does get out of shape, the lock comes back so it can be
         // steered straight again.
-        float recover = 0.8f * Math.min(1f, Math.abs(slipAngle) / 0.5f);
+        float recover = spec.steerLock * 0.8f * Math.min(1f, Math.abs(slipAngle) / 0.5f);
+        maxSteer = Math.max(maxSteer, Math.min(spec.steerLock, demand * recover));
 
-        float maxSteer = spec.steerLock * Math.max(speedFactor, recover);
-        float targetSteer = c.steer * maxSteer;
+        float targetSteer = Math.signum(c.steer) * maxSteer;
 
         // Winding lock on is slower than letting it come back, the way a wheel
         // is heavier into a corner than out of one.
@@ -232,14 +265,19 @@ public class Car {
         // Braking effort kept apart from the rest of the resistance, because
         // load transfer follows the pedals, not the air.
         float brakeAccel = 0f;
-        float resist = aeroDrag() * speedRatio * speedRatio
-                + ROLLING * (0.15f + 0.85f * creep)
+        // Everything that slows the car through its tyres is gathered here and
+        // capped by what the tyres hold, because brakes, engine braking and
+        // rolling drag all pass through the same contact patches. Air is the
+        // one that does not, so it is added afterwards and is not capped.
+        float aero = aeroDrag() * speedRatio * speedRatio;
+        float resist = ROLLING * (0.15f + 0.85f * creep)
                 + (1f - surface) * 7f * creep;
         float drive = 0f;
 
         if (airborne) {
             // Wheels in the air do nothing at all, either way.
-            resist = aeroDrag() * 0.76f * speedRatio * speedRatio;
+            resist = 0f;
+            aero = aeroDrag() * 0.76f * speedRatio * speedRatio;
         } else {
             if (inReverse) {
                 // With only two pedals the brake has to be the reverse
@@ -271,7 +309,11 @@ public class Car {
             {
                 // What the tyres can take. Low enough that a powerful car in
                 // first gear overwhelms them and a small hatchback does not.
-                traction = (1.9f + 3.9f * surface) + 4.6f * surface * Math.min(1f, absV / 18f);
+                // What the driven tyres can put down. The drive layout is not
+                // modelled, so the driven axle is taken as the rear with the
+                // squat that hard acceleration puts on it.
+                float driveLoad = clamp((1f - spec.frontWeight) + 0.14f, 0.45f, 0.70f);
+                traction = spec.grip * surface * GRAVITY * driveLoad;
                 // The handbrake locks the rear, so there is nothing there to
                 // drive the car forward with.
                 if (c.handbrake) traction *= 0.35f;
@@ -285,14 +327,17 @@ public class Car {
             lockup = 0f;
             if (c.brake > 0.01f && !inReverse) {
                 if (vLong > 0.6f) {
-                    float demand = c.brake * spec.brakePower;
-                    float maxBrake = 9.5f * surface;
-                    if (demand > maxBrake) {
-                        lockup = Math.min(1f, (demand - maxBrake) / demand);
-                        demand = maxBrake + (demand - maxBrake) * 0.25f;
+                    float pedal = c.brake * spec.brakePower;
+                    // Brakes cannot beat the tyres. Past this the wheels lock,
+                    // and a locked tyre slides — which stops the car slightly
+                    // less well than one still turning, never better.
+                    float maxBrake = spec.grip * GRAVITY * surface;
+                    if (pedal > maxBrake) {
+                        lockup = Math.min(1f, (pedal - maxBrake) / pedal);
+                        pedal = maxBrake * (1f - 0.12f * lockup);
                     }
-                    resist += demand;
-                    brakeAccel = demand;
+                    resist += pedal;
+                    brakeAccel = pedal;
                     drive = 0f;
                 } else {
                     // Stopped with the brake still down: select reverse.
@@ -307,6 +352,11 @@ public class Car {
             // and a parked car rolls back unless the handbrake is on.
             vLong -= GRAVITY * (float) Math.sin(slopePitch) * dt;
         }
+
+        if (!airborne) {
+            resist = Math.min(resist, spec.grip * GRAVITY * surface);
+        }
+        resist += aero;
 
         vLong += drive * dt;
 
@@ -337,75 +387,70 @@ public class Car {
         float longAccel = (vLong - lastForwardSpeed) / dt;
         lastForwardSpeed = vLong;
 
-        // ---- lateral dynamics: two axles, a tyre curve, real yaw inertia.
-        //      The yaw rate is a state now rather than a function of the
-        //      steering angle, so the car carries rotation and has to be
-        //      caught — which is the whole difference between a car that
-        //      corners on its tyres and a car that merely points.
+        // ---- lateral dynamics: a bicycle model fed by axle load.
         float axleFront = spec.wheelbase * (1f - spec.frontWeight);
         float axleRear = spec.wheelbase * spec.frontWeight;
-        float izz = spec.wheelbase * spec.wheelbase * 0.30f;
+        // Yaw inertia as a radius of gyration, which for a car is a little
+        // under half the wheelbase.
+        float izz = 0.22f * spec.wheelbase * spec.wheelbase;
 
         // Weight moves because the driver asked it to. Deriving this from net
         // acceleration instead makes aerodynamic drag alone pitch the car onto
         // its nose at motorway speed, unloading the rear until the mildest
         // steering input spins it — which is not a corner anyone can take.
-        float loadShift = clamp((drive - brakeAccel) / 8f, -1f, 1f);
-        float gripF = spec.gripFront * surface * (1f - 0.18f * loadShift);
-        float gripR = spec.gripRear * surface * (1f + 0.18f * loadShift);
+        float transfer = clamp((drive - brakeAccel) / GRAVITY
+                * (spec.cgHeight / spec.wheelbase), -0.30f, 0.30f);
+        float loadF = clamp(spec.frontWeight - transfer, 0.14f, 0.86f);
+        float loadR = 1f - loadF;
 
-        // Friction circle: whatever the rear axle spends driving, it cannot
-        // spend gripping. This is where power oversteer comes from.
+        // What each axle can do sideways: the load it carries times what the
+        // tyre can hold. The balance figure is the car's one deliberate bias —
+        // a front that lets go a little before the rear, so it runs wide
+        // rather than swapping ends.
+        float muF = (spec.grip - spec.balance) * surface;
+        float muR = (spec.grip + spec.balance) * surface;
+
         // Friction circle: grip spent driving the car forward is not available
         // to turn it. Bounded well short of zero, because a tyre at its
         // longitudinal limit still corners, and a model that says otherwise
         // makes full throttle mid-corner a spin.
         float longShare = Math.min(1f, Math.abs(drive) / Math.max(1f, traction));
         float circle = (float) Math.sqrt(Math.max(0.72f, 1f - longShare * longShare));
-
-        // Spinning tyres have a little less to give sideways. Kept small and
-        // kept off the balance: both axles feel it, so hard acceleration never
-        // turns a stable car into an unstable one.
         float spinLoss = 1f - 0.12f * wheelspin;
-        gripF *= circle * spinLoss;
-        gripR *= circle * spinLoss;
+
+        float peakF = muF * loadF * GRAVITY * circle * spinLoss;
+        float peakR = muR * loadR * GRAVITY * circle * spinLoss;
         if (lockup > 0f) {
-            gripF *= 1f - 0.60f * lockup;
-            gripR *= 1f - 0.60f * lockup;
+            peakF *= 1f - 0.60f * lockup;
+            peakR *= 1f - 0.60f * lockup;
         }
         if (airborne) {
-            gripF = 0f;
-            gripR = 0f;
+            peakF = 0f;
+            peakR = 0f;
         }
 
-        // Crawling and reverse fall back to steering geometry, so parking stays
-        // predictable and the solver never divides by nothing.
-        float forwardness = clamp((absV - 1.5f) / 6f, 0f, 1f);
+        // Below walking pace the bicycle model divides by almost nothing, so
+        // parking falls back on plain steering geometry.
+        float dynamic = clamp((absV - 1.0f) / 3.5f, 0f, 1f);
 
         float h = dt / LATERAL_STEPS;
         for (int step = 0; step < LATERAL_STEPS; step++) {
-            float uRef = Math.max(Math.abs(vLong), 2.4f);
+            float uRef = Math.max(Math.abs(vLong), 2.0f);
             slipFront = (float) Math.atan2(vLat + yawRate * axleFront, uRef) - effectiveSteer;
             slipRear = (float) Math.atan2(vLat - yawRate * axleRear, uRef);
 
-            float fyF = -tyreForce(slipFront, gripF) * forwardness;
-            float fyR = -tyreForce(slipRear, gripR) * forwardness;
+            float fyF = -tyreForce(slipFront, peakF) * dynamic;
+            float fyR = -tyreForce(slipRear, peakR) * dynamic;
 
             vLat += (fyF + fyR) * h;
             yawRate += ((axleFront * fyF - axleRear * fyR) / izz) * h;
 
             float kinematic = (vLong / spec.wheelbase) * (float) Math.tan(effectiveSteer);
-            yawRate += (kinematic - yawRate) * (1f - forwardness) * Math.min(1f, h * 14f);
+            yawRate += (kinematic - yawRate) * (1f - dynamic) * Math.min(1f, h * 14f);
 
-            // Rotation bleeds off on its own. Without this the car spins up to
-            // the limit and stays there, which on a phone is unrecoverable:
-            // by the time a thumb has moved, the car is backwards.
-            yawRate -= yawRate * YAW_DAMPING * h;
             if (yawRate > YAW_MAX) yawRate = YAW_MAX;
             if (yawRate < -YAW_MAX) yawRate = -YAW_MAX;
 
-            // Turning the body also turns the frame the velocity is measured
-            // in, and that rotation is what carries the car round the corner.
             float turn = yawRate * h;
             float nu = vLong + vLat * turn;
             float nv = vLat - vLong * turn;
@@ -481,8 +526,13 @@ public class Car {
      * instead of collapsing. The gentle tail is what makes a big slip angle
      * something a driver can hold rather than a cliff to fall off.
      */
+    /**
+     * One tyre curve for both axles: it climbs to a peak at {@link #PEAK_SLIP}
+     * and eases off after it, so a tyre asked for more than it has gives back
+     * less, not more. The peak passed in is what that axle's load allows.
+     */
     private static float tyreForce(float slip, float peak) {
-        return peak * (float) Math.sin(1.55 * Math.atan(9.0 * slip));
+        return peak * (float) Math.sin(TYRE_SHAPE * Math.atan(TYRE_STIFF * slip));
     }
 
     /**

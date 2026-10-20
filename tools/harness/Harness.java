@@ -36,6 +36,7 @@ public class Harness {
         obstacles();
         terrainDriving();
         stability();
+        cornering();
 
         System.out.println();
         System.out.println(failures == 0
@@ -342,10 +343,10 @@ public class Harness {
 
         // ---- wheelspin: a powerful car lights them up off the line, a small
         //      hatchback does not.
-        float spinGt = launchSpin(CarSpec.GARAGE[0]);
-        float spinHatch = launchSpin(CarSpec.GARAGE[2]);
+        float spinGt = launchSpin(CarSpec.GARAGE[3]);        // SIMSEK GT
+        float spinHatch = launchSpin(CarSpec.GARAGE[6]);     // MINIK HATCH
         check(spinGt > 0.15f, "the fast car spins its wheels off the line (" + spinGt + ")");
-        check(spinHatch < spinGt, "the small hatchback has less wheelspin than the GT");
+        check(spinHatch < spinGt, "and the small hatchback does not (" + spinHatch + ")");
 
         // ---- locked brakes stop the car steering.
         car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
@@ -547,6 +548,153 @@ public class Harness {
     }
 
     /**
+     * Cornering. What a car does when it is asked to turn is most of what it
+     * does at all, and until this suite existed nothing measured it: the cars
+     * shipped using half the grip they had, with the front tyres steered past
+     * their own peak so that more lock bought less corner.
+     *
+     * Lateral acceleration is read from the car's state rather than from the
+     * circle it drives, so it is valid during the turn-in and does not need
+     * room for a skidpad. Only frames on full-grip tarmac count.
+     */
+    static void cornering() {
+        System.out.println("[cornering]");
+        float[] speeds = {8f, 14f, 22f, 32f, 42f};
+
+        for (CarSpec spec : CarSpec.GARAGE) {
+            float limit = spec.grip;
+            float previousRadius = 0f;
+            for (float v : speeds) {
+                float g = corner(spec, v, 1f);
+                // Full input means "as much corner as this car has". Short of
+                // that and the car is leaving grip unused, which is what makes
+                // steering feel dead; over it and it is a different car.
+                check(g > limit * 0.78f, spec.name + " at " + Math.round(v)
+                        + " m/s uses its grip (" + round1(g) + " of " + round1(limit) + " g)");
+                check(g < limit * 1.15f, spec.name + " at " + Math.round(v)
+                        + " m/s does not exceed it (" + round1(g) + " g)");
+
+                float radius = v * v / (g * 9.81f);
+                check(radius > previousRadius, spec.name + " turns wider at "
+                        + Math.round(v) + " m/s than below it");
+                previousRadius = radius;
+            }
+
+            // Parking-speed lock: a junction has to be takeable.
+            float tight = 8f * 8f / (corner(spec, 8f, 1f) * 9.81f);
+            check(tight < 12f, spec.name + " can take a junction ("
+                    + round1(tight) + " m radius at 8 m/s)");
+
+            // Half input, half the corner: the steering has to be progressive
+            // or the car is an on/off switch.
+            float half = corner(spec, 22f, 0.5f);
+            float full = corner(spec, 22f, 1f);
+            check(half < full * 0.8f, spec.name + " answers part steering with "
+                    + "part of a corner (" + round1(half) + " vs " + round1(full) + " g)");
+            check(half > full * 0.25f, spec.name + " is not dead off centre");
+        }
+
+        // A grippier car corners harder, and the order is the order of the
+        // numbers in the garage rather than an accident of tuning.
+        float gt = corner(CarSpec.GARAGE[3], 22f, 1f);        // SIMSEK GT, 1.08
+        float suv = corner(CarSpec.GARAGE[5], 22f, 1f);       // KARTAL SUV, 0.78
+        check(gt > suv * 1.2f, "the GT out-corners the SUV (" + round1(gt)
+                + " vs " + round1(suv) + " g)");
+
+        // At the limit the front gives up first, so the car runs wide instead
+        // of swapping ends. This is what the balance figure buys.
+        for (CarSpec spec : CarSpec.GARAGE) {
+            Car car = new Car();
+            Controls c = new Controls();
+            car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
+            car.vz = 26f;
+            c.steer = 1f;
+            float frontSlip = 0f, rearSlip = 0f;
+            for (int i = 0; i < 90; i++) {
+                hold(car, c, 26f);
+                car.update(1f / 60f, c);
+                if (i > 45) {
+                    frontSlip = Math.max(frontSlip, Math.abs(car.slipFront));
+                    rearSlip = Math.max(rearSlip, Math.abs(car.slipRear));
+                }
+            }
+            check(frontSlip > rearSlip, spec.name + " runs wide at the limit ("
+                    + round1(deg(frontSlip)) + " front vs " + round1(deg(rearSlip)) + " rear)");
+            // Past the tyre's own peak, more steering buys less corner. A
+            // little past is the limit; a long way past is the bug this suite
+            // was written to catch.
+            check(frontSlip < 0.26f, spec.name + " is not steered past what its "
+                    + "front tyres can use (" + round1(deg(frontSlip)) + " degrees)");
+        }
+
+        // The car has to answer the wheel promptly, and the same way every time.
+        for (CarSpec spec : CarSpec.GARAGE) {
+            float quick = responseMs(spec, 22f);
+            check(quick > 0f && quick < 420f, spec.name + " answers the wheel in "
+                    + Math.round(quick) + " ms");
+        }
+    }
+
+    /**
+     * Peak lateral acceleration, in g, from a turn-in at a held speed.
+     * Only frames on full-grip tarmac count, so the figure is about the car.
+     */
+    static float corner(CarSpec spec, float speed, float steer) {
+        Car car = new Car();
+        Controls c = new Controls();
+        car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
+        car.vz = speed;
+        c.steer = steer;
+        float previousLat = car.lateralSpeed;
+        float best = 0f;
+        for (int i = 0; i < 110; i++) {
+            hold(car, c, speed);
+            car.update(1f / 60f, c);
+            float lateral = (car.lateralSpeed - previousLat) * 60f
+                    + car.forwardSpeed * car.yawRate;
+            previousLat = car.lateralSpeed;
+            if (i > 6 && Terrain.surfaceGrip(car.x, car.z) > 0.98f) {
+                best = Math.max(best, Math.abs(lateral) / 9.81f);
+            }
+        }
+        return best;
+    }
+
+    /** Time for the yaw rate to reach 63% of what the turn settles at. */
+    static float responseMs(CarSpec spec, float speed) {
+        Car car = new Car();
+        Controls c = new Controls();
+        car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
+        car.vz = speed;
+        c.steer = 1f;
+        float settled = 0f;
+        for (int i = 0; i < 110; i++) {
+            hold(car, c, speed);
+            car.update(1f / 60f, c);
+            settled = Math.max(settled, Math.abs(car.yawRate));
+        }
+        car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
+        car.vz = speed;
+        for (int i = 0; i < 110; i++) {
+            hold(car, c, speed);
+            car.update(1f / 60f, c);
+            if (Math.abs(car.yawRate) >= 0.63f * settled) return i * 1000f / 60f;
+        }
+        return -1f;
+    }
+
+    static float clamp(float v, float lo, float hi) {
+        return v < lo ? lo : (v > hi ? hi : v);
+    }
+
+    /** Holds a car at a speed, so a measurement is of cornering, not of gearing. */
+    static void hold(Car car, Controls c, float target) {
+        float error = target - (float) Math.hypot(car.vx, car.vz);
+        c.throttle = clamp(error * 0.5f, 0f, 1f);
+        c.brake = clamp(-error * 0.3f, 0f, 1f);
+    }
+
+    /**
      * Ordinary driving. Every car, every speed, every amount of steering: the
      * car goes round the corner. The absence of this suite is how a garage of
      * cars that spun at any speed, on a quarter of a turn, got shipped.
@@ -554,12 +702,15 @@ public class Harness {
     static void stability() {
         System.out.println("[stability]");
 
-        // A car is unstable above a critical speed when its rear axle is
-        // weaker, relative to the weight it carries, than its front. No amount
-        // of driving skill saves it, so no car is allowed to be built that way.
+        // Grip now follows axle load, so a car cannot be given a combination
+        // that is quietly unstable. What is left to check is that each one
+        // carries its deliberate bias towards the front, which is what makes
+        // it run wide rather than swap ends when it finally lets go.
         for (CarSpec spec : CarSpec.GARAGE) {
-            check(spec.balance() < 0.98f, spec.name + " is stable by construction ("
-                    + round1(spec.balance()) + ")");
+            check(spec.balance > 0f, spec.name + " is biased to understeer ("
+                    + spec.balance + ")");
+            check(spec.balance < spec.grip * 0.2f, spec.name + " is not biased so far "
+                    + "that it will not turn");
         }
 
         float worst = 0f;
@@ -600,7 +751,7 @@ public class Harness {
         // travelling sideways. Nothing driven normally may get near the latter.
         check(worst < 0.36f, "no car slides when it is simply driven (" + worstCase + ")");
         check(worstSpin < 0.62f, "and none of them spins itself to a stop (" + spinCase + ")");
-        System.out.println("  worst ordinary-driving slip: " + round1(deg(worst)) + " degrees");
+        System.out.println("  worst ordinary-driving slip: " + worstCase);
 
         // Straight ahead with the throttle buried, the car goes straight.
         for (CarSpec spec : CarSpec.GARAGE) {
@@ -837,28 +988,36 @@ public class Harness {
             Car crash = new Car();
             Controls cc = new Controls();
             // Line up square on the wall, well clear of it, and floor it.
-            crash.reset(CarSpec.GARAGE[0], wall[0], wall[1] - wall[3] - 45f, 0f);
+            crash.reset(CarSpec.GARAGE[0], wall[0], wall[1] - wall[3] - 30f, 0f);
+            crash.vz = 24f;
             cc.throttle = 1f;
             float deepest = 0f;
             float topSpeed = 0f;
+            // The speed the impact leaves the car with, not the speed it has
+            // got back to afterwards — it is still flat out the whole time.
+            float afterHit = Float.MAX_VALUE;
+            boolean hit = false;
             for (int i = 0; i < 60 * 12; i++) {
                 crash.update(1f / 60f, cc);
                 ob.refresh(crash.x, crash.z);
                 crash.resolveObstacles(ob);
-                topSpeed = Math.max(topSpeed, Math.abs(crash.forwardSpeed));
+                if (!hit) topSpeed = Math.max(topSpeed, Math.abs(crash.forwardSpeed));
+                if (crash.z > wall[1] - wall[3] - 3f) hit = true;
+                if (hit) afterHit = Math.min(afterHit, Math.abs(crash.forwardSpeed));
                 float insideX = wall[2] - Math.abs(crash.x - wall[0]);
                 float insideZ = wall[3] - Math.abs(crash.z - wall[1]);
                 if (insideX > 0f && insideZ > 0f) {
                     deepest = Math.max(deepest, Math.min(insideX, insideZ));
                 }
             }
+            check(hit, "the car reached the wall");
             check(topSpeed > 15f, "the car got up to speed before the wall");
             check(deepest < 1.2f, "the car never ends up inside the wall (worst "
                     + deepest + "m in)");
             check(!Float.isNaN(crash.x) && !Float.isNaN(crash.z) && !Float.isNaN(crash.yaw),
                     "collision leaves the car numerically sane");
-            check(Math.abs(crash.forwardSpeed) < topSpeed * 0.75f,
-                    "hitting a wall costs speed");
+            check(afterHit < topSpeed * 0.75f, "hitting a wall costs speed ("
+                    + round1(topSpeed) + " down to " + round1(afterHit) + " m/s)");
         }
     }
 
