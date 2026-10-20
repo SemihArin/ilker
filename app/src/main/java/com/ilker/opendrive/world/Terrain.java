@@ -161,7 +161,16 @@ public final class Terrain {
      * ground. Transitions are smoothed so that mounting a pavement feels like
      * a bump rather than a teleport.
      */
+    /**
+     * Development hook for the off-device test harness: when set, the ground
+     * the car drives on is one endless, flat sheet of dry tarmac, so handling
+     * can be measured on a skidpad instead of on whatever field a turn happens
+     * to end up in. The game never sets it.
+     */
+    public static boolean testTrack;
+
     public static float surfaceHeight(float x, float z) {
+        if (testTrack) return 0f;
         float base = height(x, z);
         float d = distanceToRoadCentre(x, z);
         if (d <= ROAD_HALF) {
@@ -182,6 +191,7 @@ public final class Terrain {
 
     /** Rolling resistance multiplier of the surface under a given point. */
     public static float surfaceGrip(float x, float z) {
+        if (testTrack) return 1f;
         float d = distanceToRoadCentre(x, z);
         if (d <= ROAD_HALF) return 1f;
         float t = smoothstep(ROAD_HALF, ROAD_HALF + 4f, d);

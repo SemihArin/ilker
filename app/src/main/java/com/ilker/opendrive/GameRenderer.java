@@ -258,7 +258,7 @@ public class GameRenderer implements GLSurfaceView.Renderer {
             System.arraycopy(touchY, 0, localTouchY, 0, count);
         }
 
-        hud.processInput(localTouchX, localTouchY, count, controls, tiltSteer, tiltEnabled);
+        hud.processInput(localTouchX, localTouchY, count, controls, tiltSteer, tiltEnabled, dt);
         handleButtons();
 
         car.update(dt, controls);

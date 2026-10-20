@@ -4,11 +4,13 @@ import com.ilker.opendrive.game.CarSpec;
 import com.ilker.opendrive.game.Controls;
 import com.ilker.opendrive.gl.Frustum;
 import com.ilker.opendrive.gl.MeshBuilder;
+import com.ilker.opendrive.ui.Hud;
 import com.ilker.opendrive.world.ChunkBuilder;
 import com.ilker.opendrive.world.ChunkData;
 import com.ilker.opendrive.world.Obstacles;
 import com.ilker.opendrive.world.Terrain;
 
+import java.lang.reflect.Field;
 import java.nio.FloatBuffer;
 import java.nio.ShortBuffer;
 
@@ -37,6 +39,7 @@ public class Harness {
         terrainDriving();
         stability();
         cornering();
+        thumbOnTheGlass();
 
         System.out.println();
         System.out.println(failures == 0
@@ -636,28 +639,153 @@ public class Harness {
     }
 
     /**
-     * Peak lateral acceleration, in g, from a turn-in at a held speed.
-     * Only frames on full-grip tarmac count, so the figure is about the car.
+     * The complaint, as a test: hold the gas, hold an arrow, does the car come
+     * round? Run through the real interface code — the same touch handling
+     * the phone uses — so the steering ramp, the physics and everything
+     * between them are tested together, on the flat track.
+     *
+     * Every earlier suite drove the car with a steering number typed straight
+     * in, at a speed held steady, and measured the first moments of the turn.
+     * A player does none of that: they hold the throttle the whole way, press
+     * an arrow wherever their thumb lands, and keep it there. That is how the
+     * car shipped turning a 130-metre circle that widened as it went.
      */
-    static float corner(CarSpec spec, float speed, float steer) {
+    static void thumbOnTheGlass() {
+        System.out.println("[thumb on the glass]");
+        boolean was = Terrain.testTrack;
+        Terrain.testTrack = true;
+        try {
+            Hud hud = new Hud();
+            hud.layout(1920, 1080);
+            float padX = field(hud, "padRightX"), padW = field(hud, "padW");
+            float padY = field(hud, "padY"), padH = field(hud, "padH");
+            float gasX = field(hud, "gasX"), gasY = field(hud, "gasY");
+            float arrowY = padY + padH * 0.5f;
+            float inner = padX + padW * 0.05f, middle = padX + padW * 0.5f;
+            float outer = padX + padW * 0.95f;
+
+            for (CarSpec spec : CarSpec.GARAGE) {
+                float[] town = turn(hud, spec, 0f, middle, arrowY, gasX, gasY, 9999);
+                check(town[0] > 0f && town[0] < 3.6f, spec.name + " comes round a "
+                        + "junction from a standing start in " + round1(town[0]) + "s");
+
+                float[] road = turn(hud, spec, 22f, middle, arrowY, gasX, gasY, 9999);
+                check(road[0] > 0f && road[0] < 6.2f, spec.name + " turns through 90 "
+                        + "degrees from 80 km/h in " + round1(road[0]) + "s");
+                // The throttle is held the whole way. A car that accelerates
+                // out of the corner it is turning is a car whose corner widens
+                // with every metre and never comes round.
+                check(road[1] < 22f * 1.15f, spec.name + " does not accelerate away "
+                        + "from the corner (" + round1(road[1]) + " m/s at 90 degrees)");
+
+                // A tap is a correction, not a turn.
+                float[] tap = turn(hud, spec, 22f, middle, arrowY, gasX, gasY, 6);
+                check(tap[2] < 6f, spec.name + " answers a tap with a nudge ("
+                        + round1(tap[2]) + " degrees)");
+            }
+
+            // An arrow is a button. Where on it the thumb happens to land must
+            // not decide how hard the car turns.
+            float[] edgeIn = turn(hud, CarSpec.GARAGE[0], 22f, inner, arrowY, gasX, gasY, 9999);
+            float[] edgeOut = turn(hud, CarSpec.GARAGE[0], 22f, outer, arrowY, gasX, gasY, 9999);
+            check(Math.abs(edgeIn[0] - edgeOut[0]) < 0.05f * edgeOut[0],
+                    "an arrow turns the car the same wherever it is pressed ("
+                            + round1(edgeIn[0]) + "s vs " + round1(edgeOut[0]) + "s)");
+
+            // Holding an arrow reaches full lock quickly; letting go brings
+            // the wheel back to the middle quickly too.
+            Controls c = new Controls();
+            float dt = 1f / 60f;
+            hud.processInput(new float[0], new float[0], 0, c, 0f, false, dt);
+            int frames = 0;
+            while (c.steer < 0.999f && frames < 120) {
+                hud.processInput(new float[]{middle}, new float[]{arrowY}, 1, c, 0f, false, dt);
+                frames++;
+            }
+            check(frames * dt < 0.4f, "holding an arrow winds on full lock in "
+                    + Math.round(frames * dt * 1000f) + " ms");
+            frames = 0;
+            while (Math.abs(c.steer) > 0.001f && frames < 120) {
+                hud.processInput(new float[0], new float[0], 0, c, 0f, false, dt);
+                frames++;
+            }
+            check(frames * dt < 0.2f, "letting go centres the wheel in "
+                    + Math.round(frames * dt * 1000f) + " ms");
+        } catch (Exception e) {
+            check(false, "the interface could be driven: " + e);
+        } finally {
+            Terrain.testTrack = was;
+        }
+    }
+
+    static float field(Hud hud, String name) throws Exception {
+        Field f = Hud.class.getDeclaredField(name);
+        f.setAccessible(true);
+        return (Float) f.get(hud);
+    }
+
+    /**
+     * Gas held throughout; an arrow pressed after a short run-up and held for
+     * the given number of frames. Returns seconds to turn 90 degrees (or -1),
+     * the speed at that moment, and the heading change at the end, in degrees.
+     */
+    static float[] turn(Hud hud, CarSpec spec, float start, float arrowX, float arrowY,
+                        float gasX, float gasY, int holdFrames) {
         Car car = new Car();
         Controls c = new Controls();
-        car.reset(spec, -Terrain.LANE_OFFSET, 0f, 0f);
-        car.vz = speed;
-        c.steer = steer;
-        float previousLat = car.lateralSpeed;
-        float best = 0f;
-        for (int i = 0; i < 110; i++) {
-            hold(car, c, speed);
-            car.update(1f / 60f, c);
-            float lateral = (car.lateralSpeed - previousLat) * 60f
-                    + car.forwardSpeed * car.yawRate;
-            previousLat = car.lateralSpeed;
-            if (i > 6 && Terrain.surfaceGrip(car.x, car.z) > 0.98f) {
-                best = Math.max(best, Math.abs(lateral) / 9.81f);
+        car.reset(spec, 0f, 0f, 0f);
+        car.vz = start;
+        float dt = 1f / 60f;
+        int lead = start > 0f ? 30 : 120;
+        float startYaw = 0f, at90 = -1f, speedAt90 = 0f;
+        hud.processInput(new float[0], new float[0], 0, c, 0f, false, dt);
+        for (int i = 0; i < 60 * 10; i++) {
+            boolean arrow = i >= lead && i < lead + holdFrames;
+            float[] xs = arrow ? new float[]{gasX, arrowX} : new float[]{gasX};
+            float[] ys = arrow ? new float[]{gasY, arrowY} : new float[]{gasY};
+            hud.processInput(xs, ys, xs.length, c, 0f, false, dt);
+            if (i == lead) startYaw = car.yaw;
+            car.update(dt, c);
+            if (i >= lead && at90 < 0f && turned(car.yaw, startYaw) >= Math.PI / 2) {
+                at90 = (i - lead) * dt;
+                speedAt90 = (float) Math.hypot(car.vx, car.vz);
             }
         }
-        return best;
+        return new float[]{at90, speedAt90, deg(turned(car.yaw, startYaw))};
+    }
+
+    static float turned(float yaw, float from) {
+        float d = Math.abs(yaw - from);
+        return d > Math.PI ? (float) (2 * Math.PI) - d : d;
+    }
+
+    /**
+     * Steady lateral acceleration, in g, at a held speed, on the flat test
+     * track. Steady, not peak: the first moments of a turn-in overshoot, and
+     * measuring that overshoot is exactly how a car that settled into half the
+     * corner it was asked for passed this suite.
+     */
+    static float corner(CarSpec spec, float speed, float steer) {
+        boolean was = Terrain.testTrack;
+        Terrain.testTrack = true;
+        Car car = new Car();
+        Controls c = new Controls();
+        car.reset(spec, 0f, 0f, 0f);
+        car.vz = speed;
+        c.steer = steer;
+        float yawSum = 0f, speedSum = 0f;
+        int n = 0;
+        for (int i = 0; i < 60 * 5; i++) {
+            hold(car, c, speed);
+            car.update(1f / 60f, c);
+            if (i >= 60 * 4) {
+                yawSum += Math.abs(car.yawRate);
+                speedSum += (float) Math.hypot(car.vx, car.vz);
+                n++;
+            }
+        }
+        Terrain.testTrack = was;
+        return (yawSum / n) * (speedSum / n) / 9.81f;
     }
 
     /** Time for the yaw rate to reach 63% of what the turn settles at. */
@@ -727,17 +855,22 @@ public class Harness {
                         car.vz = v;
                         c.steer = steer;
                         c.throttle = throttle;
+                        // A slide is the rear tyres giving up, so that is what is
+                        // measured. The body's own angle to its path is no use at
+                        // low speed: turning tightly at walking pace the car
+                        // points well inside its path on geometry alone, with
+                        // every tyre gripping.
                         float peak = 0f;
                         for (int i = 0; i < 180; i++) {
                             car.update(1f / 60f, c);
-                            peak = Math.max(peak, Math.abs(car.slipAngle));
+                            peak = Math.max(peak, Math.abs(car.slipRear));
                         }
                         float kept = (float) Math.hypot(car.vx, car.vz) / v;
                         String where = spec.name + " at " + Math.round(v) + " m/s, steer "
                                 + steer + ", throttle " + throttle;
                         if (peak > worst) {
                             worst = peak;
-                            worstCase = where + " reached " + round1(deg(peak)) + " degrees";
+                            worstCase = where + ": rear tyres at " + round1(deg(peak)) + " degrees";
                         }
                         if (throttle > 0.4f && 1f - kept > worstSpin) {
                             worstSpin = 1f - kept;
@@ -749,7 +882,7 @@ public class Harness {
         }
         // Twenty degrees is a car leaning on its tyres; ninety is a car
         // travelling sideways. Nothing driven normally may get near the latter.
-        check(worst < 0.36f, "no car slides when it is simply driven (" + worstCase + ")");
+        check(worst < 0.24f, "no car slides when it is simply driven (" + worstCase + ")");
         check(worstSpin < 0.62f, "and none of them spins itself to a stop (" + spinCase + ")");
         System.out.println("  worst ordinary-driving slip: " + worstCase);
 

@@ -59,6 +59,10 @@ public class Hud {
 
     private boolean leftLit, rightLit, gasLit, brakeLit, handLit;
     private float steerShown;
+    /** The steering the pads are currently holding, ramped rather than instant. */
+    private float padSteer;
+    /** The steering last handed to the car, for the indicator bar. */
+    private float lastSteer;
     private float steerPressure;
 
     private final float[] trafficScratch = new float[64];
@@ -142,13 +146,25 @@ public class Hud {
         return px >= x - grow && px <= x + w + grow && py >= y - grow && py <= y + h + grow;
     }
 
+    /** Steering pads wind on to full lock in about this long, seconds. */
+    private static final float PAD_WIND_ON = 0.32f;
+    /** A first touch is worth this much straight away, so a tap is a correction. */
+    private static final float PAD_FIRST = 0.22f;
+    /** Letting go returns the wheel to centre this much faster than winding on. */
+    private static final float PAD_RETURN = 2.6f;
+
+    public void processInput(float[] px, float[] py, int count, Controls out,
+                             float tiltSteer, boolean tiltEnabled) {
+        processInput(px, py, count, out, tiltSteer, tiltEnabled, 1f / 60f);
+    }
+
     /**
      * Turns the live pointer list into control inputs. The hit areas are
      * deliberately larger than the shapes drawn: thumbs drift while the car is
      * moving, and losing the throttle mid-corner is worse than an overlap.
      */
     public void processInput(float[] px, float[] py, int count, Controls out,
-                             float tiltSteer, boolean tiltEnabled) {
+                             float tiltSteer, boolean tiltEnabled, float dt) {
         out.clear();
         leftLit = false;
         rightLit = false;
@@ -167,20 +183,13 @@ public class Hud {
 
             // One zone split down the middle rather than two grown rectangles:
             // overlapping hit areas would cancel each other out in the seam.
-            // How far out the thumb sits decides how much lock, so a small
-            // correction on a straight no longer means full opposite lock.
             if (x <= padRightX + padW + grow && y >= padY - grow) {
-                float span = (padRightX + padW) - steerSplit;
-                float offset = (x - steerSplit) / Math.max(1f, span);
-                float amount = 0.45f + 0.55f * Math.min(1f, Math.abs(offset) / 0.85f);
-                if (offset < 0f) {
-                    steerInput -= amount;
+                if (x < steerSplit) {
+                    steerInput -= 1f;
                     leftLit = true;
-                    steerPressure = amount;
                 } else {
-                    steerInput += amount;
+                    steerInput += 1f;
                     rightLit = true;
-                    steerPressure = amount;
                 }
             }
             // Nearest pedal wins. Growing three circles independently would
@@ -218,12 +227,35 @@ public class Hud {
             btnDown[i] = btnNowDown[i];
         }
 
-        if (tiltEnabled) {
-            steerInput += tiltSteer;
+        // The pads are buttons, and a button is all or nothing — so the wheel
+        // is wound on while one is held instead of being slammed to a value
+        // set by where the thumb happened to land. Holding an arrow means
+        // "turn", and it gets there in a third of a second; a quick tap is a
+        // small correction; letting go brings the wheel back to the middle.
+        // Taking the amount from the thumb's position instead meant an arrow
+        // pressed near its inner edge asked for under half a turn, and the
+        // car simply did not come round.
+        float held = Math.max(-1f, Math.min(1f, steerInput));
+        if (held != 0f) {
+            if (Math.signum(held) != Math.signum(padSteer)) {
+                padSteer = held * PAD_FIRST;       // a fresh press, or a change of mind
+            }
+            padSteer += held * dt / PAD_WIND_ON;
+            if (Math.abs(padSteer) > 1f) padSteer = Math.signum(padSteer);
+        } else {
+            float back = dt * PAD_RETURN / PAD_WIND_ON;
+            padSteer = Math.abs(padSteer) <= back ? 0f : padSteer - Math.signum(padSteer) * back;
         }
-        if (steerInput > 1f) steerInput = 1f;
-        if (steerInput < -1f) steerInput = -1f;
-        out.steer = steerInput;
+        steerPressure = Math.abs(padSteer);
+
+        float steer = padSteer;
+        if (tiltEnabled) {
+            steer += tiltSteer;
+        }
+        if (steer > 1f) steer = 1f;
+        if (steer < -1f) steer = -1f;
+        out.steer = steer;
+        lastSteer = steer;
     }
 
     public boolean wasTapped(int button) {
@@ -235,7 +267,7 @@ public class Hud {
     public void draw(HudProgram g, Car car, Traffic traffic,
                      int lightMode, boolean tiltEnabled, float timeOfDay, int fps,
                      String message, float messageAlpha) {
-        steerShown += (car.steerAngle / 0.62f - steerShown) * 0.35f;
+        steerShown += (lastSteer - steerShown) * 0.35f;
 
         drawMinimap(g, car, traffic);
         drawStats(g, car, timeOfDay, fps);
