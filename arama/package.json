@@ -1,0 +1,14 @@
+{
+  "name": "arama",
+  "version": "0.1.0",
+  "description": "Arama sitesi için Node.js sunucusu",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
