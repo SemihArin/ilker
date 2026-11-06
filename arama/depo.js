@@ -16,26 +16,8 @@ const VARSAYILAN_AYARLAR = Object.freeze({
   kullaniciAdi: 'Misafir',
 });
 
-const SAAT = 60 * 60 * 1000;
-const GUN = 24 * SAAT;
-
-// İlk çalıştırmada sayfadaki örnek geçmişle aynı içerik.
-function ornekGecmis() {
-  const simdi = Date.now();
-  const ornek = [
-    ['3:42', 35, 2 * SAAT], ['12:05', 80, 5 * SAAT], ['8:19', 100, 9 * SAAT],
-    ['45:30', 20, 1 * GUN], ['5:07', 60, 1 * GUN + SAAT], ['1:02:14', 45, 1 * GUN + 2 * SAAT],
-    ['9:48', 90, 3 * GUN], ['15:33', 15, 4 * GUN], ['4:21', 70, 5 * GUN], ['27:56', 55, 6 * GUN],
-  ];
-  return ornek.map(([sure, ilerleme, once], i) => ({
-    id: 'v' + (i + 1),
-    baslik: 'Video başlığı ' + (i + 1),
-    kanal: 'Kanal adı',
-    sure,
-    ilerleme,
-    izlenme: new Date(simdi - once).toISOString(),
-  }));
-}
+// Geçmişte yalnızca gerçek YouTube video kimlikleri tutulur.
+const VIDEO_KIMLIGI = /^[A-Za-z0-9_-]{11}$/;
 
 class Depo {
   constructor(dosya) {
@@ -48,12 +30,15 @@ class Depo {
     try {
       const ham = JSON.parse(await fsp.readFile(this.dosya, 'utf8'));
       this.veri = {
-        gecmis: Array.isArray(ham.gecmis) ? ham.gecmis : [],
+        // Eski sürümün örnek kayıtları (v1, v2...) gerçek video olmadığı için atılır.
+        gecmis: (Array.isArray(ham.gecmis) ? ham.gecmis : []).filter(
+          (k) => k && typeof k.id === 'string' && VIDEO_KIMLIGI.test(k.id) && typeof k.izlenme === 'string'
+        ),
         ayarlar: { ...VARSAYILAN_AYARLAR, ...(ham.ayarlar || {}) },
       };
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
-      this.veri = { gecmis: ornekGecmis(), ayarlar: { ...VARSAYILAN_AYARLAR } };
+      this.veri = { gecmis: [], ayarlar: { ...VARSAYILAN_AYARLAR } };
       await this.kaydet();
     }
   }
@@ -74,12 +59,15 @@ class Depo {
     return [...this.veri.gecmis].sort((a, b) => b.izlenme.localeCompare(a.izlenme));
   }
 
-  async gecmiseEkle(kayit) {
+  // tasi=false ise kayıt güncellenir ama izlenme zamanı (sırası) değişmez.
+  async gecmiseEkle(kayit, { tasi = true } = {}) {
     const liste = this.veri.gecmis;
     const i = liste.findIndex((k) => k.id === kayit.id);
     const eski = i >= 0 ? liste[i] : {};
-    const yeni = { ...eski, ...kayit, izlenme: new Date().toISOString() };
+    const yeni = { ...eski, ...kayit };
+    if (tasi || !yeni.izlenme) yeni.izlenme = new Date().toISOString();
     if (yeni.ilerleme === undefined) yeni.ilerleme = 0;
+    if (yeni.konum === undefined) yeni.konum = 0;
     if (i >= 0) liste.splice(i, 1);
     liste.push(yeni);
     // Çok büyümesin: en yeni 200 kayıt.
@@ -115,4 +103,4 @@ class Depo {
   }
 }
 
-module.exports = { Depo, VARSAYILAN_AYARLAR };
+module.exports = { Depo, VARSAYILAN_AYARLAR, VIDEO_KIMLIGI };

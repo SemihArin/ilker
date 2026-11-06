@@ -4,10 +4,12 @@
 // Çalıştırma: npm start
 // Ortam değişkenleri: PORT (varsayılan 3000), HOST (varsayılan 0.0.0.0),
 //                     VERI_DOSYASI (varsayılan ./data/veri.json)
+//                     YOUTUBE_API_KEY (metin araması için YouTube Data API v3 anahtarı)
 
 const path = require('path');
 const express = require('express');
-const { Depo, VARSAYILAN_AYARLAR } = require('./depo');
+const { Depo, VARSAYILAN_AYARLAR, VIDEO_KIMLIGI } = require('./depo');
+const yt = require('./yt');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -55,13 +57,50 @@ function metin(deger, alan, { zorunlu = false, enFazla = 200 } = {}) {
   return kirpik;
 }
 
+function videoKimligi(deger) {
+  const id = metin(deger, 'id', { zorunlu: true, enFazla: 11 });
+  if (!VIDEO_KIMLIGI.test(id)) throw new IstekHatasi('"id" geçerli bir YouTube video kimliği olmalı');
+  return id;
+}
+
+// İlerleme (0-100) ve konum (saniye) alanlarını doğrular.
+function ilerlemeAlanlari(govde, kayit) {
+  if (govde.ilerleme !== undefined) {
+    const p = Number(govde.ilerleme);
+    if (!Number.isFinite(p) || p < 0 || p > 100) throw new IstekHatasi('"ilerleme" 0-100 arası bir sayı olmalı');
+    kayit.ilerleme = Math.round(p);
+  }
+  if (govde.konum !== undefined) {
+    const k = Number(govde.konum);
+    if (!Number.isFinite(k) || k < 0 || k > 864000) throw new IstekHatasi('"konum" geçerli bir saniye değeri olmalı');
+    kayit.konum = Math.floor(k);
+  }
+  return kayit;
+}
+
 // ---------------- API ----------------
 
 const api = express.Router();
 api.use(express.json({ limit: '10kb' }));
 
 api.get('/saglik', (req, res) => {
-  res.json({ durum: 'ok', calismaSuresi: Math.round(process.uptime()) });
+  res.json({ durum: 'ok', calismaSuresi: Math.round(process.uptime()), aramaAnahtari: yt.anahtarVar() });
+});
+
+// Arama: ?q=metin ya da YouTube linki, &sayfa=sonrakiSayfa değeri
+api.get('/ara', async (req, res) => {
+  const q = metin(req.query.q, 'q', { zorunlu: true, enFazla: 200 });
+  const sayfa = metin(req.query.sayfa, 'sayfa', { enFazla: 100 });
+  try {
+    res.set('Cache-Control', 'private, max-age=300');
+    res.json(await yt.ara(q, sayfa));
+  } catch (err) {
+    if (err instanceof yt.AramaHatasi) {
+      res.set('Cache-Control', 'no-store');
+      return res.status(err.durum).json({ hata: err.message, kod: err.kod });
+    }
+    throw err;
+  }
 });
 
 // Geçmiş
@@ -74,16 +113,15 @@ api.post('/gecmis', async (req, res) => {
   if (!depo.ayarlar().gecmisiKaydet) {
     return res.status(409).json({ hata: 'Geçmiş kaydı ayarlardan kapatılmış' });
   }
-  const kayit = {
-    id: metin(govde.id, 'id', { zorunlu: true, enFazla: 64 }),
+  const kayit = ilerlemeAlanlari(govde, {
+    id: videoKimligi(govde.id),
     baslik: metin(govde.baslik, 'baslik', { zorunlu: true }),
     kanal: metin(govde.kanal, 'kanal'),
     sure: metin(govde.sure, 'sure', { enFazla: 16 }),
-  };
-  if (govde.ilerleme !== undefined) {
-    const p = Number(govde.ilerleme);
-    if (!Number.isFinite(p) || p < 0 || p > 100) throw new IstekHatasi('"ilerleme" 0-100 arası bir sayı olmalı');
-    kayit.ilerleme = Math.round(p);
+    kucukResim: metin(govde.kucukResim, 'kucukResim', { enFazla: 300 }),
+  });
+  if (kayit.kucukResim && !/^https:\/\/i\d?\.ytimg\.com\//.test(kayit.kucukResim)) {
+    throw new IstekHatasi('"kucukResim" bir YouTube küçük resim adresi olmalı');
   }
   for (const k of Object.keys(kayit)) if (kayit[k] === undefined) delete kayit[k];
   res.status(201).json(await depo.gecmiseEkle(kayit));
@@ -92,6 +130,20 @@ api.post('/gecmis', async (req, res) => {
 api.delete('/gecmis', async (req, res) => {
   await depo.gecmisiTemizle();
   res.status(204).end();
+});
+
+// İzlerken ilerlemeyi günceller; kaydın sırası değişmez.
+api.patch('/gecmis/:id', async (req, res) => {
+  const govde = req.body || {};
+  const id = req.params.id;
+  if (!depo.gecmis().some((k) => k.id === id)) return res.status(404).json({ hata: 'Kayıt bulunamadı' });
+  if (!depo.ayarlar().gecmisiKaydet) {
+    return res.status(409).json({ hata: 'Geçmiş kaydı ayarlardan kapatılmış' });
+  }
+  const kayit = ilerlemeAlanlari(govde, { id });
+  const sure = metin(govde.sure, 'sure', { enFazla: 16 });
+  if (sure) kayit.sure = sure;
+  res.json(await depo.gecmiseEkle(kayit, { tasi: false }));
 });
 
 api.delete('/gecmis/:id', async (req, res) => {
@@ -168,6 +220,9 @@ async function baslat() {
   await depo.yukle();
   const server = app.listen(PORT, HOST, () => {
     console.log(`Arama sunucusu çalışıyor: http://localhost:${PORT}`);
+    if (!yt.anahtarVar()) {
+      console.log('Uyarı: YOUTUBE_API_KEY tanımlı değil; metin araması kapalı, yalnızca YouTube linkleri açılabilir.');
+    }
   });
 
   const kapat = () => {
