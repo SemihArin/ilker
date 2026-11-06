@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Cpath d='M12 9.5v13l11-6.5z' fill='%23fff'/%3E%3C/svg%3E">
 <title>Arama</title>
 <style>
   :root {
@@ -447,7 +450,8 @@
   }
   .seg input:checked + span { background: var(--bg); box-shadow: var(--shadow); font-weight: 600; }
   @media (prefers-reduced-motion: reduce) {
-    .page, .skeleton * { animation: none !important; }
+    .page, .video, .skeleton * { animation: none !important; }
+    .cards { scroll-behavior: auto; }
   }
 
 
@@ -525,16 +529,6 @@
   /* ---- Arama ve oynatıcı ---- */
   .video { position: sticky; }
   .video > div, .video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-  .video-bos {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-    font-size: 14px;
-    text-align: center;
-    color: rgba(255, 255, 255, 0.7);
-  }
-  .video-bos[hidden] { display: none; }
   .results-col { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 600px; }
   .results-head { font-size: 13px; opacity: 0.6; }
   .thumb img {
@@ -560,6 +554,312 @@
   .sk-line { height: 12px; margin: 4px 0 8px; border-radius: 6px; }
   @keyframes nabiz { 50% { opacity: 0.5; } }
   .empty.hata { color: #dc2626; border-color: rgba(220, 38, 38, 0.4); opacity: 1; }
+
+  /* ==== Arayüz iyileştirmeleri ==== */
+  [hidden] { display: none !important; }
+  ::selection { background: rgba(37, 99, 235, 0.25); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .result:focus-visible, .card:focus-visible { outline-offset: 0; }
+  button { -webkit-tap-highlight-color: transparent; }
+
+  /* Arama kutusu */
+  .search { position: relative; z-index: 25; }
+  .search-field { position: relative; flex: 1; display: flex; min-width: 0; }
+  .search-field input { flex: 1; padding-right: 76px; }
+  .search input::-webkit-search-cancel-button, .search input::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
+  .search-clear {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: var(--fg);
+    background: none;
+    border: 0;
+    border-radius: 50%;
+    opacity: 0.55;
+    cursor: pointer;
+    transform: translateY(-50%);
+  }
+  .search-clear:hover { opacity: 1; background: rgba(127, 127, 127, 0.15); }
+  .search-kbd {
+    position: absolute;
+    top: 50%;
+    right: 16px;
+    padding: 1px 7px;
+    font: 600 12px/18px system-ui, sans-serif;
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    opacity: 0.5;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+  .search-field:focus-within .search-kbd, .search-clear:not([hidden]) ~ .search-kbd { display: none; }
+  @media (hover: none) { .search-kbd { display: none; } }
+  .suggest {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    padding: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+  }
+  .suggest-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 10px 6px;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.6;
+  }
+  .suggest-head .link { font-size: 12px; }
+  .suggest-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 4px 0 12px;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .suggest-item.active, .suggest-item:hover { background: rgba(127, 127, 127, 0.12); }
+  .suggest-item svg { flex: none; width: 16px; height: 16px; opacity: 0.5; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .suggest-item span { flex: 1; min-width: 0; padding: 10px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+  .suggest-item .remove-mini {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    font-size: 16px;
+    color: var(--fg);
+    background: none;
+    border: 0;
+    border-radius: 50%;
+    opacity: 0.45;
+    cursor: pointer;
+  }
+  .suggest-item .remove-mini:hover { opacity: 1; background: rgba(127, 127, 127, 0.16); }
+
+  /* İzlemeye devam et */
+  .continue { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 1100px; }
+  .continue .see-all { margin-bottom: 0; }
+  .see-all-right { padding: 4px 0 4px 8px; background: none; border: 0; color: inherit; font: inherit; }
+  .cards-wrap { position: relative; }
+  .cards { scroll-behavior: smooth; }
+  .card { position: relative; }
+  .cards-nav {
+    position: absolute;
+    top: 40px;
+    z-index: 2;
+    display: none;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    transform: translateY(-50%);
+  }
+  .cards-nav.prev { left: -14px; }
+  .cards-nav.next { right: -14px; }
+  .cards-nav svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  @media (hover: hover) { .cards-nav { display: grid; } .cards-nav:disabled { display: none; } }
+  .card-img .duration { z-index: 1; }
+  .card-meta { margin-top: 6px; font-size: 11px; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Küçük resim üstü */
+  .thumb::after, .card-img::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 5.5v13l10.5-6.5z' fill='%23fff'/%3E%3C/svg%3E") no-repeat center / 30px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  @media (hover: hover) {
+    .result:hover .thumb::after, .card:hover .card-img::after { opacity: 1; }
+  }
+  .result.playing .thumb::after {
+    opacity: 1;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Crect x='5' y='10' width='3' height='9' rx='1'/%3E%3Crect x='10.5' y='5' width='3' height='14' rx='1'/%3E%3Crect x='16' y='8' width='3' height='11' rx='1'/%3E%3C/svg%3E");
+    background-size: 26px;
+  }
+  .badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 1;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.75);
+    border-radius: 4px;
+  }
+  .result.playing { background: rgba(37, 99, 235, 0.08); }
+
+  /* Oynatıcı ve "şimdi oynuyor" */
+  .player-col { display: contents; }
+  .video { animation: gir 0.2s ease; }
+  .now {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    max-width: 600px;
+    margin-top: -8px;
+  }
+  .now-text { flex: 1; min-width: 0; }
+  .now-title {
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .now-channel { margin-top: 4px; font-size: 13px; opacity: 0.6; }
+  .now-actions { display: flex; gap: 4px; flex: none; }
+  .icon-btn {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    color: var(--fg);
+    background: rgba(127, 127, 127, 0.12);
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .icon-btn:hover { background: rgba(127, 127, 127, 0.22); }
+  .icon-btn:active { transform: scale(0.94); }
+  .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Boş durum / karşılama */
+  .hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 36px 16px;
+    text-align: center;
+  }
+  .hero-icon {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    margin-bottom: 4px;
+    color: var(--accent);
+    background: rgba(37, 99, 235, 0.12);
+    border-radius: 18px;
+  }
+  .hero-icon svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .hero h2 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+  .hero p { margin: 0; max-width: 360px; font-size: 14px; line-height: 1.45; opacity: 0.65; }
+  .hero.hata .hero-icon { color: #dc2626; background: rgba(220, 38, 38, 0.12); }
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+  .hero .btn-ghost { margin-top: 6px; }
+
+  /* Geçmiş sayfası */
+  .page-head { flex-wrap: wrap; }
+  .filter { position: relative; }
+  .filter input {
+    width: 100%;
+    padding: 10px 16px 10px 40px;
+    font: inherit;
+    font-size: 15px;
+    color: var(--fg);
+    background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.5-3.5'/%3E%3C/svg%3E") no-repeat 14px center;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .filter input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25); }
+
+  /* Bildirim */
+  .toast {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    left: 0;
+    right: 0;
+    width: max-content;
+    margin: 0 auto;
+    line-height: 1.35;
+    pointer-events: none;
+    transform: translateY(20px);
+  }
+  .toast.show { transform: translateY(0); }
+  .toast button { flex: none; white-space: nowrap; }
+  .toast.show { pointer-events: auto; }
+  .toast button {
+    padding: 4px 2px;
+    font: inherit;
+    font-weight: 700;
+    color: #93c5fd;
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+
+  /* Ayarlar */
+  .row .link { padding: 4px 0; font-size: 14px; }
+
+  /* Menü markası (masaüstü) */
+  .brand { display: none; }
+
+  @media (min-width: 900px) {
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px 18px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--fg);
+    }
+    .brand-logo {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      background: var(--accent);
+      border-radius: 9px;
+    }
+    .brand-logo svg { width: 14px; height: 14px; fill: #fff; stroke: none; }
+    .main.solo { grid-template-columns: minmax(0, 760px); justify-content: center; }
+    .main { grid-template-columns: minmax(0, 1fr) 400px; }
+    .player-col {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      position: sticky;
+      top: max(24px, env(safe-area-inset-top, 0px));
+    }
+    .player-col .video { position: relative; top: auto; }
+    .now { max-width: none; margin-top: 0; }
+    .now-title { font-size: 19px; }
+    .search { max-width: 640px; }
+  }
 
   @media (min-width: 900px) {
     body {
@@ -613,31 +913,63 @@
 </head>
 <body>
   <section class="page" id="p-home">
-  <form class="search" id="arama-formu" role="search" action="/" method="get">
-    <input id="arama" name="q" type="search" enterkeyhint="search" autocomplete="off" maxlength="200" placeholder="Ara ya da YouTube linki yapıştır..." aria-label="Video ara">
+  <form class="search" id="arama-formu" role="search" action="/" method="get" autocomplete="off">
+    <div class="search-field">
+      <input id="arama" name="q" type="search" enterkeyhint="search" autocomplete="off" maxlength="200"
+        placeholder="Ara ya da YouTube linki yapıştır" aria-label="Video ara"
+        role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="oneriler">
+      <button class="search-clear" id="arama-temizle" type="button" aria-label="Aramayı temizle" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <kbd class="search-kbd" title="Aramaya git">/</kbd>
+    </div>
+    <div class="suggest" id="oneriler" role="listbox" aria-label="Son aramalar" hidden></div>
   </form>
 
-  <div class="see-all">
-    <span>Geçmiş</span>
-    <span class="see-all-right">
-      <span>Tümünü gör</span>
-      <span class="arrow">›</span>
-    </span>
+  <div class="continue" id="devam-bolumu" hidden>
+    <div class="see-all">
+      <span>İzlemeye devam et</span>
+      <button class="see-all-right" type="button">
+        <span>Tümünü gör</span>
+        <span class="arrow">›</span>
+      </button>
+    </div>
+    <div class="cards-wrap">
+      <button class="cards-nav prev" type="button" aria-label="Geri kaydır" tabindex="-1"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <div class="cards" id="son-izlenenler"></div>
+      <button class="cards-nav next" type="button" aria-label="İleri kaydır" tabindex="-1"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
   </div>
 
-  <div class="cards" id="son-izlenenler"></div>
+  <div class="main solo" id="ana-icerik">
+    <div class="player-col" id="oynatici-alani" hidden>
+      <div class="video" id="video-kutusu">
+        <div id="oynatici"></div>
+      </div>
+      <div class="now" id="simdi-oynuyor">
+        <div class="now-text">
+          <h2 class="now-title" id="simdi-baslik"></h2>
+          <div class="now-channel" id="simdi-kanal"></div>
+        </div>
+        <div class="now-actions">
+          <a class="icon-btn" id="youtubeda-ac" href="#" target="_blank" rel="noopener noreferrer" title="YouTube’da aç" aria-label="YouTube’da aç">
+            <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+          </a>
+          <button class="icon-btn" id="linki-kopyala" type="button" title="Linki kopyala" aria-label="Linki kopyala">
+            <svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
+          </button>
+          <button class="icon-btn" id="oynaticiyi-kapat" type="button" title="Oynatıcıyı kapat" aria-label="Oynatıcıyı kapat">
+            <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
 
-  <div class="main">
-  <div class="video" id="video-kutusu">
-    <div id="oynatici"></div>
-    <div class="video-bos" id="video-bos">Oynatmak için bir video seç</div>
-  </div>
-
-  <div class="results-col">
-    <div class="results-head" id="sonuc-basligi" hidden></div>
-    <div class="results" id="sonuclar" aria-live="polite"></div>
-    <button class="btn btn-ghost" type="button" id="daha-fazla" hidden>Daha fazla göster</button>
-  </div>
+    <div class="results-col">
+      <div class="results-head" id="sonuc-basligi" hidden></div>
+      <div class="results" id="sonuclar" aria-live="polite"></div>
+      <button class="btn btn-ghost" type="button" id="daha-fazla" hidden>Daha fazla göster</button>
+    </div>
   </div>
   </section>
 
@@ -646,6 +978,9 @@
       <div class="page-head">
         <h1 class="page-title">Geçmiş</h1>
         <button class="link" type="button" id="gecmisi-temizle">Geçmişi temizle</button>
+      </div>
+      <div class="filter" id="gecmis-filtre-alani">
+        <input id="gecmis-filtre" type="search" placeholder="Geçmişte ara" aria-label="Geçmişte ara" autocomplete="off">
       </div>
       <div id="gecmis-listesi" class="narrow"></div>
     </div>
@@ -661,8 +996,13 @@
       <h2 class="section-title">Oynatma</h2>
       <div class="panel group">
         <div class="row"><div>Otomatik oynat<small>Seçilen video hemen başlasın</small></div><label class="switch"><input type="checkbox" data-ayar="otomatikOynat"><span class="track"></span></label></div>
-        <div class="row"><div>Kaldığım yerden devam et<small>Geçmişteki videolarda process bar'dan devam</small></div><label class="switch"><input type="checkbox" data-ayar="kaldigimYerdenDevam" checked><span class="track"></span></label></div>
-        <div class="row"><div>Geçmişi kaydet</div><label class="switch"><input type="checkbox" data-ayar="gecmisiKaydet" checked><span class="track"></span></label></div>
+        <div class="row"><div>Kaldığım yerden devam et<small>Daha önce açtığın videolar kaldığın saniyeden başlasın</small></div><label class="switch"><input type="checkbox" data-ayar="kaldigimYerdenDevam" checked><span class="track"></span></label></div>
+        <div class="row"><div>Geçmişi kaydet<small>İzlediğin videolar bu tarayıcıda saklansın</small></div><label class="switch"><input type="checkbox" data-ayar="gecmisiKaydet" checked><span class="track"></span></label></div>
+      </div>
+      <h2 class="section-title">Veriler</h2>
+      <div class="panel group">
+        <div class="row"><div>Son aramalar<small>Arama kutusunda önerilen son aramaların</small></div><button class="link" type="button" id="aramalari-temizle">Temizle</button></div>
+        <div class="row"><div>İzleme geçmişi<small>Tüm veriler yalnızca bu tarayıcıda tutulur</small></div><button class="link" type="button" id="ayarlardan-gecmisi-temizle">Temizle</button></div>
       </div>
       <h2 class="section-title">Ortak İzleme</h2>
       <div class="panel group">
@@ -671,12 +1011,14 @@
       </div>
       <h2 class="section-title">Hakkında</h2>
       <div class="panel group">
-        <div class="row"><div>Sürüm</div><span class="value">0.1</span></div>
+        <div class="row"><div>Sürüm</div><span class="value">0.2</span></div>
+        <div class="row"><div>Klavye kısayolları<small>/ arama · Esc kapat · K oynat/duraklat</small></div></div>
       </div>
     </div>
   </section>
 
   <nav class="menu" aria-label="Ana menü">
+    <div class="brand"><span class="brand-logo"><svg viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg></span>Arama</div>
     <a href="#" data-page="home" class="active" aria-current="page">
       <svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
       <span>Ana Sayfa</span>
