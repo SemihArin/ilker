@@ -1,158 +1,189 @@
 'use strict';
 
-// Arama sitesi için bağımlılıksız Node.js sunucusu.
-// Çalıştırma: node server.js   (ya da npm start)
-// Ortam değişkenleri: PORT (varsayılan 3000), HOST (varsayılan 0.0.0.0)
+// Arama sitesi — Express sunucusu ve geçmiş/ayarlar API'si.
+// Çalıştırma: npm start
+// Ortam değişkenleri: PORT (varsayılan 3000), HOST (varsayılan 0.0.0.0),
+//                     VERI_DOSYASI (varsayılan ./data/veri.json)
 
-const http = require('http');
-const fs = require('fs');
 const path = require('path');
-const zlib = require('zlib');
+const express = require('express');
+const { Depo, VARSAYILAN_AYARLAR } = require('./depo');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
+const VERI_DOSYASI = process.env.VERI_DOSYASI || path.join(__dirname, 'data', 'veri.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.ico': 'image/x-icon',
-  '.txt': 'text/plain; charset=utf-8',
-  '.woff2': 'font/woff2',
-};
-const COMPRESSIBLE = new Set(['.html', '.css', '.js', '.json', '.svg', '.txt']);
+const depo = new Depo(VERI_DOSYASI);
+const app = express();
 
-const SECURITY_HEADERS = {
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'X-Frame-Options': 'SAMEORIGIN',
-};
-
-function send(res, status, body, headers = {}) {
-  res.writeHead(status, { ...SECURITY_HEADERS, ...headers });
-  res.end(body);
-}
-
-function sendJson(res, status, data) {
-  send(res, status, JSON.stringify(data), { 'Content-Type': MIME['.json'], 'Cache-Control': 'no-store' });
-}
-
-// İstek yolunu public/ içinde güvenli bir dosya yoluna çevirir (dizin dışına çıkmayı engeller).
-function resolvePath(urlPath) {
-  let decoded;
-  try {
-    decoded = decodeURIComponent(urlPath);
-  } catch {
-    return null;
-  }
-  if (decoded.includes('\0')) return null;
-  const filePath = path.normalize(path.join(PUBLIC_DIR, decoded));
-  if (filePath !== PUBLIC_DIR && !filePath.startsWith(PUBLIC_DIR + path.sep)) return null;
-  return filePath;
-}
-
-function serveFile(req, res, filePath, stat) {
-  const ext = path.extname(filePath).toLowerCase();
-  const etag = `W/"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
-  const headers = {
-    'Content-Type': MIME[ext] || 'application/octet-stream',
-    'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600',
-    'Last-Modified': stat.mtime.toUTCString(),
-    ETag: etag,
-  };
-
-  if (req.headers['if-none-match'] === etag) {
-    return send(res, 304, null, headers);
-  }
-
-  const acceptsGzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
-  const useGzip = acceptsGzip && COMPRESSIBLE.has(ext) && stat.size > 1024;
-  if (useGzip) {
-    headers['Content-Encoding'] = 'gzip';
-    headers['Vary'] = 'Accept-Encoding';
-  } else {
-    headers['Content-Length'] = stat.size;
-  }
-
-  res.writeHead(200, { ...SECURITY_HEADERS, ...headers });
-  if (req.method === 'HEAD') return res.end();
-
-  const stream = fs.createReadStream(filePath);
-  stream.on('error', () => res.destroy());
-  if (useGzip) stream.pipe(zlib.createGzip()).pipe(res);
-  else stream.pipe(res);
-}
-
-function serveStatic(req, res, pathname) {
-  const filePath = resolvePath(pathname);
-  if (!filePath) return send(res, 400, 'Geçersiz istek', { 'Content-Type': MIME['.txt'] });
-
-  fs.stat(filePath, (err, stat) => {
-    if (!err && stat.isDirectory()) {
-      const index = path.join(filePath, 'index.html');
-      return fs.stat(index, (e2, s2) => {
-        if (e2) return notFound(req, res);
-        serveFile(req, res, index, s2);
-      });
-    }
-    if (err || !stat.isFile()) return notFound(req, res);
-    serveFile(req, res, filePath, stat);
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.set({
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'X-Frame-Options': 'SAMEORIGIN',
   });
-}
-
-// Uzantısız yollar tek sayfalık uygulamaya (index.html) düşer; diğerleri 404.
-function notFound(req, res) {
-  const pathname = new URL(req.url, 'http://x').pathname;
-  if (!path.extname(pathname)) {
-    const index = path.join(PUBLIC_DIR, 'index.html');
-    return fs.stat(index, (err, stat) => {
-      if (err) return send(res, 404, 'Bulunamadı', { 'Content-Type': MIME['.txt'] });
-      serveFile(req, res, index, stat);
-    });
-  }
-  send(res, 404, 'Bulunamadı', { 'Content-Type': MIME['.txt'] });
-}
-
-const server = http.createServer((req, res) => {
-  const start = Date.now();
+  next();
+});
+app.use((req, res, next) => {
+  const bas = Date.now();
   res.on('finish', () => {
-    console.log(`${new Date().toISOString()} ${req.method} ${req.url} ${res.statusCode} ${Date.now() - start}ms`);
+    console.log(`${new Date().toISOString()} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - bas}ms`);
+  });
+  next();
+});
+
+// ---------------- Doğrulama yardımcıları ----------------
+
+class IstekHatasi extends Error {
+  constructor(mesaj, durum = 400) {
+    super(mesaj);
+    this.durum = durum;
+  }
+}
+
+function metin(deger, alan, { zorunlu = false, enFazla = 200 } = {}) {
+  if (deger === undefined || deger === null || deger === '') {
+    if (zorunlu) throw new IstekHatasi(`"${alan}" zorunlu`);
+    return undefined;
+  }
+  if (typeof deger !== 'string') throw new IstekHatasi(`"${alan}" metin olmalı`);
+  const kirpik = deger.trim();
+  if (zorunlu && !kirpik) throw new IstekHatasi(`"${alan}" boş olamaz`);
+  if (kirpik.length > enFazla) throw new IstekHatasi(`"${alan}" en fazla ${enFazla} karakter olabilir`);
+  return kirpik;
+}
+
+// ---------------- API ----------------
+
+const api = express.Router();
+api.use(express.json({ limit: '10kb' }));
+
+api.get('/saglik', (req, res) => {
+  res.json({ durum: 'ok', calismaSuresi: Math.round(process.uptime()) });
+});
+
+// Geçmiş
+api.get('/gecmis', (req, res) => {
+  res.json(depo.gecmis());
+});
+
+api.post('/gecmis', async (req, res) => {
+  const govde = req.body || {};
+  if (!depo.ayarlar().gecmisiKaydet) {
+    return res.status(409).json({ hata: 'Geçmiş kaydı ayarlardan kapatılmış' });
+  }
+  const kayit = {
+    id: metin(govde.id, 'id', { zorunlu: true, enFazla: 64 }),
+    baslik: metin(govde.baslik, 'baslik', { zorunlu: true }),
+    kanal: metin(govde.kanal, 'kanal'),
+    sure: metin(govde.sure, 'sure', { enFazla: 16 }),
+  };
+  if (govde.ilerleme !== undefined) {
+    const p = Number(govde.ilerleme);
+    if (!Number.isFinite(p) || p < 0 || p > 100) throw new IstekHatasi('"ilerleme" 0-100 arası bir sayı olmalı');
+    kayit.ilerleme = Math.round(p);
+  }
+  for (const k of Object.keys(kayit)) if (kayit[k] === undefined) delete kayit[k];
+  res.status(201).json(await depo.gecmiseEkle(kayit));
+});
+
+api.delete('/gecmis', async (req, res) => {
+  await depo.gecmisiTemizle();
+  res.status(204).end();
+});
+
+api.delete('/gecmis/:id', async (req, res) => {
+  const silindi = await depo.gecmistenSil(req.params.id);
+  if (!silindi) return res.status(404).json({ hata: 'Kayıt bulunamadı' });
+  res.status(204).end();
+});
+
+// Ayarlar
+const AYAR_DOGRULAYICI = {
+  tema: (v) => {
+    if (!['sistem', 'acik', 'koyu'].includes(v)) throw new IstekHatasi('"tema" sistem, acik ya da koyu olmalı');
+    return v;
+  },
+  kullaniciAdi: (v) => metin(v, 'kullaniciAdi', { zorunlu: true, enFazla: 32 }),
+};
+for (const [ad, deger] of Object.entries(VARSAYILAN_AYARLAR)) {
+  if (typeof deger === 'boolean') {
+    AYAR_DOGRULAYICI[ad] = (v) => {
+      if (typeof v !== 'boolean') throw new IstekHatasi(`"${ad}" true ya da false olmalı`);
+      return v;
+    };
+  }
+}
+
+api.get('/ayarlar', (req, res) => {
+  res.json(depo.ayarlar());
+});
+
+api.patch('/ayarlar', async (req, res) => {
+  const govde = req.body;
+  if (!govde || typeof govde !== 'object' || Array.isArray(govde)) throw new IstekHatasi('Gövde bir JSON nesnesi olmalı');
+  const degisiklik = {};
+  for (const [ad, deger] of Object.entries(govde)) {
+    const dogrula = AYAR_DOGRULAYICI[ad];
+    if (!dogrula) throw new IstekHatasi(`Bilinmeyen ayar: "${ad}"`);
+    degisiklik[ad] = dogrula(deger);
+  }
+  res.json(await depo.ayarlariGuncelle(degisiklik));
+});
+
+api.use((req, res) => res.status(404).json({ hata: 'Bulunamadı' }));
+
+// API hata yakalayıcı (Express 5 async hataları buraya iletir)
+api.use((err, req, res, next) => {
+  if (err instanceof IstekHatasi) return res.status(err.durum).json({ hata: err.message });
+  if (err.type === 'entity.parse.failed') return res.status(400).json({ hata: 'Geçersiz JSON' });
+  if (err.type === 'entity.too.large') return res.status(413).json({ hata: 'İstek çok büyük' });
+  console.error(err);
+  res.status(500).json({ hata: 'Sunucu hatası' });
+});
+
+app.use('/api', api);
+
+// ---------------- Statik site ----------------
+
+app.use(express.static(PUBLIC_DIR, {
+  setHeaders(res, dosya) {
+    res.set('Cache-Control', dosya.endsWith('.html') ? 'no-cache' : 'public, max-age=3600');
+  },
+}));
+
+// Uzantısız bilinmeyen yollar tek sayfalık uygulamaya düşer.
+app.get('/{*yol}', (req, res, next) => {
+  if (path.extname(req.path)) return next();
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+});
+
+app.use((req, res) => res.status(404).type('text').send('Bulunamadı'));
+
+// ---------------- Başlat ----------------
+
+async function baslat() {
+  await depo.yukle();
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`Arama sunucusu çalışıyor: http://localhost:${PORT}`);
   });
 
-  let url;
-  try {
-    url = new URL(req.url, 'http://localhost');
-  } catch {
-    return send(res, 400, 'Geçersiz istek', { 'Content-Type': MIME['.txt'] });
-  }
-
-  if (url.pathname === '/api/saglik') {
-    return sendJson(res, 200, { durum: 'ok', calismaSuresi: Math.round(process.uptime()) });
-  }
-
-  if (req.method !== 'GET' && req.method !== 'HEAD') {
-    return send(res, 405, 'İzin verilmeyen yöntem', { Allow: 'GET, HEAD', 'Content-Type': MIME['.txt'] });
-  }
-
-  serveStatic(req, res, url.pathname);
-});
-
-server.listen(PORT, HOST, () => {
-  console.log(`Arama sunucusu çalışıyor: http://localhost:${PORT}`);
-});
-
-function shutdown() {
-  console.log('Sunucu kapatılıyor...');
-  server.close(() => process.exit(0));
-  setTimeout(() => process.exit(1), 5000).unref();
+  const kapat = () => {
+    console.log('Sunucu kapatılıyor...');
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 5000).unref();
+  };
+  process.on('SIGINT', kapat);
+  process.on('SIGTERM', kapat);
 }
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+
+if (require.main === module) {
+  baslat().catch((err) => {
+    console.error('Sunucu başlatılamadı:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = { app, depo };

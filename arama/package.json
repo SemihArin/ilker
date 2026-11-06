@@ -1,7 +1,7 @@
 {
   "name": "arama",
   "version": "0.1.0",
-  "description": "Arama sitesi için Node.js sunucusu",
+  "description": "Arama sitesi — Express sunucusu ve geçmiş/ayarlar API'si",
   "main": "server.js",
   "private": true,
   "scripts": {
@@ -10,5 +10,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^5.3.0"
   }
 }

@@ -450,6 +450,78 @@
     .page { animation: none !important; }
   }
 
+
+  /* ---- Tema seçimi (Ayarlar) ---- */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #121212;
+    --fg: #f0f0f0;
+    --surface: #1c1c1e;
+    --border: #3a3a3c;
+    --shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    --bar-bg: rgba(18, 18, 18, 0.85);
+  }
+  :root[data-theme="light"] { color-scheme: light; }
+  .empty {
+    width: 100%;
+    padding: 18px 16px;
+    font-size: 14px;
+    text-align: center;
+    opacity: 0.6;
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+  }
+  .card { cursor: pointer; }
+  .row input.value-input {
+    width: 140px;
+    padding: 6px 12px;
+    font: inherit;
+    font-size: 14px;
+    text-align: right;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+  .row input.value-input:focus { outline: none; border-color: var(--accent); }
+  .result { position: relative; }
+  .result .remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 28px;
+    height: 28px;
+    font-size: 18px;
+    line-height: 1;
+    color: var(--fg);
+    background: none;
+    border: 0;
+    border-radius: 50%;
+    opacity: 0.45;
+    cursor: pointer;
+  }
+  .result .remove:hover { opacity: 1; background: rgba(127, 127, 127, 0.16); }
+  #gecmis-listesi .result > div:last-of-type { padding-right: 28px; }
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    z-index: 30;
+    max-width: calc(100% - 32px);
+    padding: 10px 16px;
+    font-size: 14px;
+    color: #fff;
+    background: rgba(20, 20, 20, 0.92);
+    border-radius: 999px;
+    box-shadow: var(--shadow);
+    transform: translate(-50%, 20px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  @media (min-width: 900px) { .toast { bottom: 24px; } }
+
   @media (min-width: 900px) {
     body {
       padding-top: 24px;
@@ -492,6 +564,13 @@
     .thumb { flex-basis: 140px; width: 140px; }
   }
 </style>
+<script>
+  try {
+    var t = localStorage.getItem('tema');
+    if (t === 'acik') document.documentElement.dataset.theme = 'light';
+    else if (t === 'koyu') document.documentElement.dataset.theme = 'dark';
+  } catch (e) {}
+</script>
 </head>
 <body>
   <section class="page" id="p-home">
@@ -507,54 +586,18 @@
     </span>
   </div>
 
-  <div class="cards">
-    <div class="card">
-      <div class="card-img"></div>
-      <div class="card-body">
-        <h3 class="card-title">Başlık 1</h3>
-        <div class="bar"><span style="--p:25%"></span></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-img"></div>
-      <div class="card-body">
-        <h3 class="card-title">Başlık 2</h3>
-        <div class="bar"><span style="--p:50%"></span></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-img"></div>
-      <div class="card-body">
-        <h3 class="card-title">Başlık 3</h3>
-        <div class="bar"><span style="--p:75%"></span></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-img"></div>
-      <div class="card-body">
-        <h3 class="card-title">Başlık 4</h3>
-        <div class="bar"><span style="--p:40%"></span></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-img"></div>
-      <div class="card-body">
-        <h3 class="card-title">Başlık 5</h3>
-        <div class="bar"><span style="--p:90%"></span></div>
-      </div>
-    </div>
-  </div>
+  <div class="cards" id="son-izlenenler"></div>
 
   <div class="main">
   <div class="video">
     <iframe src="https://www.youtube-nocookie.com/embed/jNQXAC9IVRw"
       title="YouTube video"
-      allow="accelerometer; encrypted-media; picture-in-picture; fullscreen"
+      allow="accelerometer; autoplay; encrypted-media; picture-in-picture; fullscreen"
       allowfullscreen></iframe>
   </div>
 
   <div class="results" id="sonuclar">
-    <div class="result">
+    <div class="result" data-id="v1">
       <div class="thumb">
         <span class="duration">3:42</span>
       </div>
@@ -563,17 +606,16 @@
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v2">
       <div class="thumb">
         <span class="duration">12:05</span>
-        <div class="thumb-bar"><span style="--p:34%"></span></div>
       </div>
       <div>
         <h3 class="result-title">Video başlığı 2</h3>
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v3">
       <div class="thumb">
         <span class="duration">8:19</span>
       </div>
@@ -582,7 +624,7 @@
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v4">
       <div class="thumb">
         <span class="duration">45:30</span>
       </div>
@@ -591,17 +633,16 @@
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v5">
       <div class="thumb">
         <span class="duration">5:07</span>
-        <div class="thumb-bar"><span style="--p:55%"></span></div>
       </div>
       <div>
         <h3 class="result-title">Video başlığı 5</h3>
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v6">
       <div class="thumb">
         <span class="duration">1:02:14</span>
       </div>
@@ -610,7 +651,7 @@
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v7">
       <div class="thumb">
         <span class="duration">9:48</span>
       </div>
@@ -619,17 +660,16 @@
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v8">
       <div class="thumb">
         <span class="duration">15:33</span>
-        <div class="thumb-bar"><span style="--p:76%"></span></div>
       </div>
       <div>
         <h3 class="result-title">Video başlığı 8</h3>
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v9">
       <div class="thumb">
         <span class="duration">4:21</span>
       </div>
@@ -638,7 +678,7 @@
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v10">
       <div class="thumb">
         <span class="duration">27:56</span>
       </div>
@@ -647,17 +687,16 @@
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v11">
       <div class="thumb">
         <span class="duration">6:10</span>
-        <div class="thumb-bar"><span style="--p:37%"></span></div>
       </div>
       <div>
         <h3 class="result-title">Video başlığı 11</h3>
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v12">
       <div class="thumb">
         <span class="duration">2:35</span>
       </div>
@@ -666,7 +705,7 @@
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v13">
       <div class="thumb">
         <span class="duration">18:44</span>
       </div>
@@ -675,17 +714,16 @@
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v14">
       <div class="thumb">
         <span class="duration">7:03</span>
-        <div class="thumb-bar"><span style="--p:58%"></span></div>
       </div>
       <div>
         <h3 class="result-title">Video başlığı 14</h3>
         <div class="result-channel">Kanal adı</div>
       </div>
     </div>
-    <div class="result">
+    <div class="result" data-id="v15">
       <div class="thumb">
         <span class="duration">10:59</span>
       </div>
@@ -702,117 +740,9 @@
     <div class="narrow">
       <div class="page-head">
         <h1 class="page-title">Geçmiş</h1>
-        <button class="link" type="button">Geçmişi temizle</button>
+        <button class="link" type="button" id="gecmisi-temizle">Geçmişi temizle</button>
       </div>
-      <h2 class="section-title">Bugün</h2>
-      <div class="list">
-      <div class="result">
-        <div class="thumb">
-          <span class="duration">3:42</span>
-          <div class="thumb-bar"><span style="--p:35%"></span></div>
-        </div>
-        <div>
-          <h3 class="result-title">Video başlığı 1</h3>
-          <div class="result-channel">Kanal adı · 2 saat önce</div>
-        </div>
-      </div>
-      <div class="result">
-        <div class="thumb">
-          <span class="duration">12:05</span>
-          <div class="thumb-bar"><span style="--p:80%"></span></div>
-        </div>
-        <div>
-          <h3 class="result-title">Video başlığı 2</h3>
-          <div class="result-channel">Kanal adı · 5 saat önce</div>
-        </div>
-      </div>
-      <div class="result">
-        <div class="thumb">
-          <span class="duration">8:19</span>
-          <div class="thumb-bar"><span style="--p:100%"></span></div>
-        </div>
-        <div>
-          <h3 class="result-title">Video başlığı 3</h3>
-          <div class="result-channel">Kanal adı · 9 saat önce</div>
-        </div>
-      </div>
-      </div>
-      <h2 class="section-title">Dün</h2>
-      <div class="list">
-      <div class="result">
-        <div class="thumb">
-          <span class="duration">45:30</span>
-          <div class="thumb-bar"><span style="--p:20%"></span></div>
-        </div>
-        <div>
-          <h3 class="result-title">Video başlığı 4</h3>
-          <div class="result-channel">Kanal adı · 1 gün önce</div>
-        </div>
-      </div>
-      <div class="result">
-        <div class="thumb">
-          <span class="duration">5:07</span>
-          <div class="thumb-bar"><span style="--p:60%"></span></div>
-        </div>
-        <div>
-          <h3 class="result-title">Video başlığı 5</h3>
-          <div class="result-channel">Kanal adı · 1 gün önce</div>
-        </div>
-      </div>
-      <div class="result">
-        <div class="thumb">
-          <span class="duration">1:02:14</span>
-          <div class="thumb-bar"><span style="--p:45%"></span></div>
-        </div>
-        <div>
-          <h3 class="result-title">Video başlığı 6</h3>
-          <div class="result-channel">Kanal adı · 1 gün önce</div>
-        </div>
-      </div>
-      </div>
-      <h2 class="section-title">Bu hafta</h2>
-      <div class="list">
-      <div class="result">
-        <div class="thumb">
-          <span class="duration">9:48</span>
-          <div class="thumb-bar"><span style="--p:90%"></span></div>
-        </div>
-        <div>
-          <h3 class="result-title">Video başlığı 7</h3>
-          <div class="result-channel">Kanal adı · 3 gün önce</div>
-        </div>
-      </div>
-      <div class="result">
-        <div class="thumb">
-          <span class="duration">15:33</span>
-          <div class="thumb-bar"><span style="--p:15%"></span></div>
-        </div>
-        <div>
-          <h3 class="result-title">Video başlığı 8</h3>
-          <div class="result-channel">Kanal adı · 4 gün önce</div>
-        </div>
-      </div>
-      <div class="result">
-        <div class="thumb">
-          <span class="duration">4:21</span>
-          <div class="thumb-bar"><span style="--p:70%"></span></div>
-        </div>
-        <div>
-          <h3 class="result-title">Video başlığı 9</h3>
-          <div class="result-channel">Kanal adı · 5 gün önce</div>
-        </div>
-      </div>
-      <div class="result">
-        <div class="thumb">
-          <span class="duration">27:56</span>
-          <div class="thumb-bar"><span style="--p:55%"></span></div>
-        </div>
-        <div>
-          <h3 class="result-title">Video başlığı 10</h3>
-          <div class="result-channel">Kanal adı · 6 gün önce</div>
-        </div>
-      </div>
-      </div>
+      <div id="gecmis-listesi" class="narrow"></div>
     </div>
   </section>
 
@@ -821,18 +751,18 @@
       <h1 class="page-title">Ayarlar</h1>
       <h2 class="section-title">Görünüm</h2>
       <div class="panel group">
-        <div class="row"><div>Tema</div><div class="seg"><label><input type="radio" name="tema" checked><span>Sistem</span></label><label><input type="radio" name="tema"><span>Açık</span></label><label><input type="radio" name="tema"><span>Koyu</span></label></div></div>
+        <div class="row"><div>Tema</div><div class="seg"><label><input type="radio" name="tema" value="sistem" checked><span>Sistem</span></label><label><input type="radio" name="tema" value="acik"><span>Açık</span></label><label><input type="radio" name="tema" value="koyu"><span>Koyu</span></label></div></div>
       </div>
       <h2 class="section-title">Oynatma</h2>
       <div class="panel group">
-        <div class="row"><div>Otomatik oynat<small>Seçilen video hemen başlasın</small></div><label class="switch"><input type="checkbox"><span class="track"></span></label></div>
-        <div class="row"><div>Kaldığım yerden devam et<small>Geçmişteki videolarda process bar'dan devam</small></div><label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
-        <div class="row"><div>Geçmişi kaydet</div><label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
+        <div class="row"><div>Otomatik oynat<small>Seçilen video hemen başlasın</small></div><label class="switch"><input type="checkbox" data-ayar="otomatikOynat"><span class="track"></span></label></div>
+        <div class="row"><div>Kaldığım yerden devam et<small>Geçmişteki videolarda process bar'dan devam</small></div><label class="switch"><input type="checkbox" data-ayar="kaldigimYerdenDevam" checked><span class="track"></span></label></div>
+        <div class="row"><div>Geçmişi kaydet</div><label class="switch"><input type="checkbox" data-ayar="gecmisiKaydet" checked><span class="track"></span></label></div>
       </div>
       <h2 class="section-title">Ortak İzleme</h2>
       <div class="panel group">
-        <div class="row"><div>Davetleri kabul et<small>Arkadaşların seni odalara çağırabilsin</small></div><label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
-        <div class="row"><div>Kullanıcı adı</div><span class="value">Misafir</span></div>
+        <div class="row"><div>Davetleri kabul et<small>Arkadaşların seni odalara çağırabilsin</small></div><label class="switch"><input type="checkbox" data-ayar="davetleriKabulEt" checked><span class="track"></span></label></div>
+        <div class="row"><div>Kullanıcı adı</div><input class="value-input" type="text" data-ayar="kullaniciAdi" maxlength="32" autocomplete="nickname" aria-label="Kullanıcı adı" value="Misafir"></div>
       </div>
       <h2 class="section-title">Hakkında</h2>
       <div class="panel group">
@@ -850,37 +780,13 @@
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Geçmiş</span>
     </a>
+    <a href="#" data-page="ayarlar">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      <span>Ayarlar</span>
+    </a>
   </nav>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script>
-    (function () {
-      var linkler = document.querySelectorAll('.menu a[data-page]');
-      var sayfalar = document.querySelectorAll('.page');
-
-      function goster(ad) {
-        sayfalar.forEach(function (p) { p.hidden = p.id !== 'p-' + ad; });
-        linkler.forEach(function (a) {
-          var aktif = a.dataset.page === ad;
-          a.classList.toggle('active', aktif);
-          if (aktif) a.setAttribute('aria-current', 'page');
-          else a.removeAttribute('aria-current');
-        });
-        window.scrollTo(0, 0);
-      }
-
-      linkler.forEach(function (a) {
-        a.addEventListener('click', function (e) {
-          e.preventDefault();
-          goster(a.dataset.page);
-        });
-      });
-
-      function bagla(secici, hedef) {
-        var el = document.querySelector(secici);
-        if (el) el.addEventListener('click', function () { goster(hedef); });
-      }
-      bagla('.see-all-right', 'gecmis');
-    })();
-  </script>
+  <script src="app.js"></script>
 </body>
 </html>
