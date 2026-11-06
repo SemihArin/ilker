@@ -11,7 +11,9 @@
   var ANAHTAR_GECMIS = 'arama.gecmis';
   var ANAHTAR_AYARLAR = 'arama.ayarlar';
   var ANAHTAR_ARAMALAR = 'arama.sonAramalar';
+  var ANAHTAR_KAYDEDILENLER = 'arama.kaydedilenler';
   var GECMIS_SINIRI = 200;
+  var KAYDEDILEN_SINIRI = 500;
   var ARAMA_SINIRI = 10;
   var VIDEO_KIMLIGI = /^[A-Za-z0-9_-]{11}$/;
   var LINK_GIBI = /^(https?:\/\/|www\.|m\.youtube|youtu)|^[\w-]{11}$/i;
@@ -20,6 +22,7 @@
     tema: 'sistem', // 'sistem' | 'acik' | 'koyu'
     otomatikOynat: false,
     kaldigimYerdenDevam: true,
+    siradakiniOynat: true,
     gecmisiKaydet: true,
     davetleriKabulEt: true,
     kullaniciAdi: 'Misafir',
@@ -71,6 +74,19 @@
 
   function gecmisiYaz(liste) {
     return yerelYaz(ANAHTAR_GECMIS, liste.slice(0, GECMIS_SINIRI));
+  }
+
+  function videoGecerliMi(k) {
+    return k && typeof k.id === 'string' && VIDEO_KIMLIGI.test(k.id) && typeof k.baslik === 'string';
+  }
+
+  // Daha sonra izle listesi (en yeni en üstte).
+  function kaydedilenleriOku() {
+    var ham = yerelOku(ANAHTAR_KAYDEDILENLER);
+    return (Array.isArray(ham) ? ham : []).filter(videoGecerliMi);
+  }
+  function kaydedilenleriYaz(liste) {
+    return yerelYaz(ANAHTAR_KAYDEDILENLER, liste.slice(0, KAYDEDILEN_SINIRI));
   }
 
   function aramalariOku() {
@@ -136,6 +152,9 @@
     anahtar: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/>',
     uyari: '<path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17.5v.5"/>',
     bos: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M8.5 11h5"/>',
+    kaydet: '<path d="M6 4h12v17l-6-4-6 4z"/>',
+    kapat: '<path d="M6 6l12 12M18 6L6 18"/>',
+    paylas: '<path d="M12 3v12M7 8l5-5 5 5M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/>',
   };
   function ikon(ad) {
     var span = el('span');
@@ -145,7 +164,7 @@
 
   // Bildirim; isteğe bağlı bir eylem düğmesiyle (ör. "Geri al").
   var toastZamani;
-  function bildir(mesaj, eylemAdi, eylem) {
+  function bildir(mesaj, eylemAdi, eylem, sure) {
     var t = $('toast');
     t.textContent = '';
     t.appendChild(el('span', '', mesaj));
@@ -160,7 +179,11 @@
     }
     t.classList.add('show');
     clearTimeout(toastZamani);
-    toastZamani = setTimeout(function () { t.classList.remove('show'); }, eylemAdi ? 5000 : 2600);
+    toastZamani = setTimeout(function () { t.classList.remove('show'); }, sure || (eylemAdi ? 5000 : 2600));
+  }
+  function bildirimiKapat() {
+    clearTimeout(toastZamani);
+    $('toast').classList.remove('show');
   }
 
   function goreliZaman(iso) {
@@ -271,6 +294,7 @@
   function adresiUygula(linkiAc) {
     var yol = location.pathname.replace(/\/+$/, '');
     if (yol === '/gecmis') return sayfaGoster('gecmis');
+    if (yol === '/kaydedilenler') return sayfaGoster('kaydedilenler');
     if (yol === '/ayarlar') return sayfaGoster('ayarlar');
     sayfaGoster('home');
     var q = (new URLSearchParams(location.search).get('q') || '').trim();
@@ -345,13 +369,26 @@
     if (meta.length) bilgi.appendChild(el('div', 'result-meta', meta.join(' · ')));
     satir.appendChild(bilgi);
 
-    if (secenek.gecmis) {
-      var sil = el('button', 'remove', '×');
-      sil.type = 'button';
-      sil.title = 'Geçmişten kaldır';
-      sil.setAttribute('aria-label', 'Geçmişten kaldır: ' + video.baslik);
-      satir.appendChild(sil);
+    var eylemler = el('div', 'result-actions');
+    if (!secenek.kaydetYok) {
+      var kayitli = kayitliMi(video.id);
+      var kaydet = el('button', 'row-btn save-btn' + (kayitli ? ' on' : ''));
+      kaydet.type = 'button';
+      kaydet.title = kayitli ? 'Kaydedilenlerden çıkar' : 'Daha sonra izle';
+      kaydet.setAttribute('aria-label', kaydet.title + ': ' + video.baslik);
+      kaydet.setAttribute('aria-pressed', kayitli ? 'true' : 'false');
+      kaydet.appendChild(ikon('kaydet'));
+      eylemler.appendChild(kaydet);
     }
+    if (secenek.kaldir) {
+      var sil = el('button', 'row-btn remove-btn');
+      sil.type = 'button';
+      sil.title = secenek.kaldir;
+      sil.setAttribute('aria-label', secenek.kaldir + ': ' + video.baslik);
+      sil.appendChild(ikon('kapat'));
+      eylemler.appendChild(sil);
+    }
+    satir.appendChild(eylemler);
     return satir;
   }
 
@@ -380,6 +417,106 @@
       kutu.appendChild(d);
     }
     return kutu;
+  }
+
+  // ---------------- Kaydedilenler (daha sonra izle) ----------------
+
+  var kaydedilenler = [];
+  var kaydedilenHaritasi = {};
+
+  function kayitliMi(id) { return !!kaydedilenHaritasi[id]; }
+
+  function kaydedilenleriYukle() {
+    kaydedilenler = kaydedilenleriOku();
+    kaydedilenHaritasi = {};
+    kaydedilenler.forEach(function (k) { kaydedilenHaritasi[k.id] = k; });
+    kaydedilenSayfasiniCiz();
+    kayitIsaretleriniGuncelle();
+  }
+
+  function kaydedilenSayfasiniCiz() {
+    var kap = $('kaydedilen-listesi');
+    kap.textContent = '';
+    $('kaydedilen-eylemler').hidden = !kaydedilenler.length;
+    $('kaydedilen-sayisi').textContent = kaydedilenler.length ? kaydedilenler.length + ' video' : '';
+    if (!kaydedilenler.length) {
+      kap.appendChild(karsilama({
+        ikon: 'kaydet',
+        baslik: 'Kaydedilen video yok',
+        metin: 'Bir videonun yanındaki kaydet simgesine dokunarak onu daha sonra izlemek üzere buraya ekleyebilirsin.',
+        dugme: 'Video ara',
+        eylem: function () { git(anaSayfaAdresi()); aramaKutusu.focus(); },
+      }));
+      return;
+    }
+    kaydedilenler.forEach(function (k) {
+      kap.appendChild(videoSatiri(k, { kaldir: 'Kaydedilenlerden çıkar', kaydetYok: true }));
+    });
+  }
+
+  // Sayfadaki tüm kaydet düğmelerinin durumunu günceller (yeniden çizmeden).
+  function kayitIsaretleriniGuncelle() {
+    document.querySelectorAll('.result[data-id] .save-btn').forEach(function (b) {
+      var satir = b.closest('.result');
+      var on = kayitliMi(satir.dataset.id);
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.title = on ? 'Kaydedilenlerden çıkar' : 'Daha sonra izle';
+    });
+    var simdi = $('simdi-kaydet');
+    var on = !!(aktif && kayitliMi(aktif.id));
+    simdi.classList.toggle('on', on);
+    simdi.setAttribute('aria-pressed', on ? 'true' : 'false');
+    simdi.title = on ? 'Kaydedilenlerden çıkar' : 'Daha sonra izle';
+    menuSayaciniGuncelle();
+  }
+
+  function menuSayaciniGuncelle() {
+    var a = document.querySelector('.menu a[data-page="kaydedilenler"]');
+    a.setAttribute('aria-label', 'Kaydedilenler' + (kaydedilenler.length ? ' (' + kaydedilenler.length + ')' : ''));
+  }
+
+  function videoOzeti(v) {
+    var kayit = gecmisHaritasi[v.id] || {};
+    return {
+      id: v.id,
+      baslik: v.baslik,
+      kanal: v.kanal || kayit.kanal || '',
+      sure: v.sure || kayit.sure || '',
+      kucukResim: v.kucukResim || kayit.kucukResim || '',
+    };
+  }
+
+  function kaydetDegistir(video) {
+    var liste = kaydedilenleriOku();
+    var varMi = liste.some(function (k) { return k.id === video.id; });
+    if (varMi) {
+      var eski = liste;
+      kaydedilenleriYaz(liste.filter(function (k) { return k.id !== video.id; }));
+      kaydedilenleriYukle();
+      bildir('Kaydedilenlerden çıkarıldı', 'Geri al', function () {
+        kaydedilenleriYaz(eski);
+        kaydedilenleriYukle();
+      });
+    } else {
+      var yeni = videoOzeti(video);
+      yeni.eklenme = new Date().toISOString();
+      liste.unshift(yeni);
+      kaydedilenleriYaz(liste);
+      kaydedilenleriYukle();
+      bildir('Daha sonra izlemek için kaydedildi', 'Göster', function () { git('/kaydedilenler'); });
+    }
+  }
+
+  function kaydedilenleriTemizle() {
+    var eski = kaydedilenleriOku();
+    if (!eski.length) return;
+    kaydedilenleriYaz([]);
+    kaydedilenleriYukle();
+    bildir(eski.length + ' video kaydedilenlerden çıkarıldı', 'Geri al', function () {
+      kaydedilenleriYaz(eski);
+      kaydedilenleriYukle();
+    });
   }
 
   // ---------------- Geçmiş ----------------
@@ -423,7 +560,7 @@
         kap.appendChild(grup);
         sonGrup = ad;
       }
-      grup.appendChild(videoSatiri(k, { gecmis: true }));
+      grup.appendChild(videoSatiri(k, { gecmis: true, kaldir: 'Geçmişten kaldır' }));
     });
   }
   filtreKutusu.addEventListener('input', gecmisSayfasiniCiz);
@@ -763,6 +900,8 @@
   var aktif = null;        // şu an yüklü video
   var sonKayit = 0;
   var SAYFA_BASLIGI = document.title;
+  var kuyruk = [];         // videonun açıldığı listenin kopyası (sıradaki için)
+  var siradakiZamani = null;
 
   // YouTube betiği yalnızca ilk video seçildiğinde yüklenir.
   function oynaticiyiKur() {
@@ -790,6 +929,8 @@
         },
         onStateChange: function (e) {
           if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) ilerlemeKaydet(true);
+          if (e.data === YT.PlayerState.ENDED) videoBitti();
+          if (e.data === YT.PlayerState.PLAYING) siradakiIptal();
         },
         onError: function (e) {
           var mesaj = { 2: 'Geçersiz video', 5: 'Video oynatılamadı', 100: 'Video bulunamadı ya da kaldırılmış', 101: 'Bu video başka sitelerde oynatılamıyor', 150: 'Bu video başka sitelerde oynatılamıyor' }[e.data];
@@ -833,18 +974,65 @@
     document.querySelectorAll('.result[data-id="' + aktif.id + '"]').forEach(function (r) { r.classList.add('playing'); });
   }
 
+  function siradakiVideo() {
+    if (!aktif) return null;
+    var i = -1;
+    for (var j = 0; j < kuyruk.length; j++) if (kuyruk[j].id === aktif.id) { i = j; break; }
+    return i >= 0 && i + 1 < kuyruk.length ? kuyruk[i + 1] : null;
+  }
+
+  function siradakiCiz() {
+    var v = siradakiVideo();
+    var d = $('siradaki');
+    d.hidden = !v;
+    if (!v) return;
+    $('siradaki-baslik').textContent = v.baslik;
+    $('siradaki-resim').src = kucukResimAdresi(v);
+    d.title = 'Sıradaki: ' + v.baslik;
+  }
+
+  function siradakineGec(oynat) {
+    var v = siradakiVideo();
+    siradakiIptal();
+    if (v) videoAc(v, { kullanici: true, liste: kuyruk, oynat: oynat !== false });
+    else bildir('Listede sıradaki video yok');
+  }
+
+  function siradakiIptal() {
+    if (siradakiZamani) { clearTimeout(siradakiZamani); siradakiZamani = null; bildirimiKapat(); }
+  }
+
+  function videoBitti() {
+    var v = siradakiVideo();
+    if (!v || !ayarlar.siradakiniOynat) return;
+    siradakiIptal();
+    bildir('Sıradaki: ' + v.baslik, 'İptal', function () { siradakiIptal(); }, 5200);
+    siradakiZamani = setTimeout(function () {
+      siradakiZamani = null;
+      siradakineGec(true);
+    }, 5000);
+  }
+
+  $('siradaki').addEventListener('click', function () { siradakineGec(true); });
+
   function simdiOynuyorCiz() {
     if (!aktif) return;
     $('simdi-baslik').textContent = aktif.baslik;
     $('simdi-kanal').textContent = aktif.kanal || '';
     $('youtubeda-ac').href = 'https://www.youtube.com/watch?v=' + aktif.id;
     document.title = aktif.baslik + ' · ' + SAYFA_BASLIGI;
+    siradakiCiz();
+    kayitIsaretleriniGuncelle();
   }
 
-  // kullanici: kullanıcı seçti (geçmişe eklenir).
+  // kullanici: kullanıcı seçti (geçmişe eklenir) · liste: sıradaki için kaynak liste
+  // oynat: otomatik oynat ayarından bağımsız olarak başlat
   function videoAc(video, secenek) {
     secenek = secenek || {};
+    siradakiIptal();
     ilerlemeKaydet(true); // önceki videonun yerini kaydet
+    if (secenek.liste) kuyruk = secenek.liste.map(videoOzeti);
+    else if (!kuyruk.some(function (k) { return k.id === video.id; })) kuyruk = [];
     var kayit = gecmisHaritasi[video.id];
     var baslangic = 0;
     if (devamGoster() && kayit && kayit.konum > 5 && kayit.ilerleme < 95) baslangic = kayit.konum;
@@ -858,7 +1046,7 @@
       canli: !!video.canli,
     };
     oynaticiyiKur();
-    var oynat = secenek.kullanici && !!(ayarlar && ayarlar.otomatikOynat);
+    var oynat = !!secenek.oynat || (secenek.kullanici && !!(ayarlar && ayarlar.otomatikOynat));
     yukle(aktif, baslangic, oynat);
     simdiOynuyorCiz();
     if (gecerliSayfa !== 'home') git(anaSayfaAdresi());
@@ -869,7 +1057,7 @@
     if (!oncedenAcikMi || r.bottom < 0 || r.top > window.innerHeight) {
       kutu.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
-    if (baslangic) bildir(sureMetni(baslangic) + ' noktasından devam ediliyor', 'Baştan başlat', function () {
+    if (baslangic && !secenek.oynat) bildir(sureMetni(baslangic) + ' noktasından devam ediliyor', 'Baştan başlat', function () {
       if (oynaticiHazir) oynatici.seekTo(0, true);
       else if (aktif) yukle(aktif, 0, true);
     });
@@ -877,6 +1065,7 @@
   }
 
   function oynaticiyiKapat() {
+    siradakiIptal();
     ilerlemeKaydet(true);
     if (oynaticiHazir && oynatici.stopVideo) oynatici.stopVideo();
     if (yedekMod) { var f = $('video-kutusu').querySelector('iframe'); if (f) f.src = 'about:blank'; }
@@ -887,9 +1076,24 @@
   }
 
   $('oynaticiyi-kapat').addEventListener('click', oynaticiyiKapat);
+  $('simdi-kaydet').addEventListener('click', function () { if (aktif) kaydetDegistir(aktif); });
+
+  // Telefonlarda sistemin paylaş menüsü, diğerlerinde panoya kopyalama.
+  var paylasilabilir = !!navigator.share && matchMedia('(hover: none)').matches;
+  if (paylasilabilir) {
+    var pd = $('linki-kopyala');
+    pd.title = 'Paylaş';
+    pd.setAttribute('aria-label', 'Paylaş');
+    pd.textContent = '';
+    pd.appendChild(ikon('paylas'));
+  }
   $('linki-kopyala').addEventListener('click', function () {
     if (!aktif) return;
     var link = 'https://youtu.be/' + aktif.id;
+    if (paylasilabilir) {
+      navigator.share({ title: aktif.baslik, url: link }).catch(function () {});
+      return;
+    }
     var bitti = function () { bildir('Link kopyalandı'); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(link).then(bitti, function () { eskiKopyala(link) ? bitti() : bildir(link); });
@@ -977,10 +1181,11 @@
       gecmisiYukle();
     }
     if (e.key === ANAHTAR_ARAMALAR && !arama.q) sonuclariCiz();
+    if (e.key === ANAHTAR_KAYDEDILENLER) kaydedilenleriYukle();
   });
 
   // ---------------- Klavye kısayolları ----------------
-  // /  arama kutusuna git · K  oynat/duraklat · Esc  öneri listesini kapat
+  // /  arama kutusuna git · K  oynat/duraklat · J / L  10 sn geri/ileri · N  sıradaki · Esc  öneri listesini kapat
 
   document.addEventListener('keydown', function (e) {
     if (e.ctrlKey || e.metaKey || e.altKey || yaziyorMu(e.target)) return;
@@ -992,6 +1197,15 @@
     } else if ((e.key === 'k' || e.key === 'K') && aktif && oynaticiHazir) {
       if (oynatici.getPlayerState() === YT.PlayerState.PLAYING) oynatici.pauseVideo();
       else oynatici.playVideo();
+    } else if ((e.key === 'j' || e.key === 'J' || e.key === 'l' || e.key === 'L') && aktif && oynaticiHazir) {
+      var fark = e.key.toLowerCase() === 'j' ? -10 : 10;
+      var hedef = Math.max(0, oynatici.getCurrentTime() + fark);
+      var toplam = oynatici.getDuration();
+      if (toplam) hedef = Math.min(hedef, toplam - 1);
+      oynatici.seekTo(hedef, true);
+      bildir((fark < 0 ? '« 10 sn geri · ' : '10 sn ileri » · ') + sureMetni(hedef), null, null, 1200);
+    } else if ((e.key === 'n' || e.key === 'N') && aktif) {
+      siradakineGec(true);
     }
   });
 
@@ -1009,29 +1223,47 @@
     });
   }
 
-  tiklaVeKlavye($('sonuclar'), '.result[data-id]', function (s) {
-    var v = sonucHaritasi[s.dataset.id];
-    if (v) videoAc(v, { kullanici: true });
-  });
+  // Bir listedeki satır tıklamaları: kaydet düğmesi, kaldır düğmesi ya da videoyu aç.
+  function listeBagla(kap, bul, liste, kaldir) {
+    tiklaVeKlavye(kap, '.result[data-id]', function (satir, e) {
+      var video = bul(satir.dataset.id);
+      if (!video) return;
+      if (e.target.closest('.save-btn')) return kaydetDegistir(video);
+      if (e.target.closest('.remove-btn')) return kaldir && kaldir(video.id);
+      videoAc(video, { kullanici: true, liste: liste() });
+    });
+    if (kaldir) {
+      // Seçili satırda Delete tuşu kaydı kaldırır.
+      kap.addEventListener('keydown', function (e) {
+        if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.matches('.result[data-id]')) {
+          e.preventDefault();
+          kaldir(e.target.dataset.id);
+        }
+      });
+    }
+  }
+
+  listeBagla($('sonuclar'),
+    function (id) { return sonucHaritasi[id]; },
+    function () { return arama.sonuclar; });
+  listeBagla($('gecmis-listesi'),
+    function (id) { return gecmisHaritasi[id]; },
+    function () { return gecmis; },
+    gecmistenKaldir);
+  listeBagla($('kaydedilen-listesi'),
+    function (id) { return kaydedilenHaritasi[id]; },
+    function () { return kaydedilenler; },
+    function (id) { kaydetDegistir(kaydedilenHaritasi[id]); });
 
   tiklaVeKlavye($('son-izlenenler'), '.card[data-id]', function (s) {
     var k = gecmisHaritasi[s.dataset.id];
-    if (k) videoAc(k, { kullanici: true });
+    if (k) videoAc(k, { kullanici: true, liste: gecmis });
   });
 
-  tiklaVeKlavye($('gecmis-listesi'), '.result[data-id]', function (s, e) {
-    var id = s.dataset.id;
-    if (e.target.closest('.remove')) return gecmistenKaldir(id);
-    var k = gecmisHaritasi[id];
-    if (k) videoAc(k, { kullanici: true });
+  $('hepsini-oynat').addEventListener('click', function () {
+    if (kaydedilenler.length) videoAc(kaydedilenler[0], { kullanici: true, liste: kaydedilenler, oynat: true });
   });
-  // Geçmiş satırında Delete tuşu kaydı kaldırır.
-  $('gecmis-listesi').addEventListener('keydown', function (e) {
-    if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.matches('.result[data-id]')) {
-      e.preventDefault();
-      gecmistenKaldir(e.target.dataset.id);
-    }
-  });
+  $('kaydedilenleri-temizle').addEventListener('click', kaydedilenleriTemizle);
 
   $('gecmisi-temizle').addEventListener('click', gecmisiTemizle);
   $('ayarlardan-gecmisi-temizle').addEventListener('click', gecmisiTemizle);
@@ -1045,6 +1277,72 @@
       if (!arama.q) sonuclariCiz();
     });
   });
+
+  // ---------------- Dışa / içe aktarma ----------------
+  // Veriler yalnızca bu tarayıcıda olduğundan başka cihaza taşımak için dosya kullanılır.
+
+  $('disa-aktar').addEventListener('click', function () {
+    var veri = {
+      uygulama: 'arama',
+      surum: 1,
+      tarih: new Date().toISOString(),
+      ayarlar: ayarlar,
+      gecmis: gecmisiOku(),
+      kaydedilenler: kaydedilenleriOku(),
+      sonAramalar: aramalariOku(),
+    };
+    var blob = new Blob([JSON.stringify(veri, null, 2)], { type: 'application/json' });
+    var a = el('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'arama-yedek-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    bildir('Yedek dosyası indirildi');
+  });
+
+  var dosyaGirdisi = $('ice-aktar-dosya');
+  $('ice-aktar').addEventListener('click', function () { dosyaGirdisi.click(); });
+  dosyaGirdisi.addEventListener('change', function () {
+    var dosya = dosyaGirdisi.files && dosyaGirdisi.files[0];
+    dosyaGirdisi.value = '';
+    if (!dosya) return;
+    if (dosya.size > 5 * 1024 * 1024) return bildir('Dosya çok büyük');
+    var okuyucu = new FileReader();
+    okuyucu.onload = function () {
+      var veri;
+      try { veri = JSON.parse(okuyucu.result); } catch (e) { return bildir('Dosya okunamadı: geçerli bir yedek değil'); }
+      if (!veri || veri.uygulama !== 'arama') return bildir('Bu dosya bir Arama yedeği değil');
+      var gelenGecmis = (Array.isArray(veri.gecmis) ? veri.gecmis : []).filter(function (k) { return videoGecerliMi(k) && typeof k.izlenme === 'string'; });
+      var gelenKayit = (Array.isArray(veri.kaydedilenler) ? veri.kaydedilenler : []).filter(videoGecerliMi);
+      var gelenArama = (Array.isArray(veri.sonAramalar) ? veri.sonAramalar : []).filter(function (q) { return typeof q === 'string'; });
+      if (!confirm('Yedek yüklensin mi?\n\n' + gelenGecmis.length + ' geçmiş kaydı, ' + gelenKayit.length +
+        ' kaydedilen video ve ayarlar bu tarayıcıdakilerin yerine geçecek.')) return;
+      var onceki = { gecmis: gecmisiOku(), kayit: kaydedilenleriOku(), arama: aramalariOku(), ayarlar: JSON.parse(JSON.stringify(ayarlar)) };
+      gecmisiYaz(gelenGecmis);
+      kaydedilenleriYaz(gelenKayit);
+      yerelYaz(ANAHTAR_ARAMALAR, gelenArama.slice(0, ARAMA_SINIRI));
+      if (veri.ayarlar && typeof veri.ayarlar === 'object') yerelYaz(ANAHTAR_AYARLAR, veri.ayarlar);
+      tumunuYenidenYukle();
+      bildir('Yedek yüklendi', 'Geri al', function () {
+        gecmisiYaz(onceki.gecmis);
+        kaydedilenleriYaz(onceki.kayit);
+        yerelYaz(ANAHTAR_ARAMALAR, onceki.arama);
+        yerelYaz(ANAHTAR_AYARLAR, onceki.ayarlar);
+        tumunuYenidenYukle();
+      });
+    };
+    okuyucu.onerror = function () { bildir('Dosya okunamadı'); };
+    okuyucu.readAsText(dosya);
+  });
+
+  function tumunuYenidenYukle() {
+    ayarlar = ayarlariOku(); // dosyadan gelen ayarlar da burada doğrulanır
+    ayarlariFormaYaz();
+    kaydedilenleriYukle();
+    gecmisiYukle();
+  }
 
   // ---------------- Ayarlar ----------------
 
@@ -1104,6 +1402,7 @@
 
   ayarlar = ayarlariOku();
   ayarlariFormaYaz();
+  kaydedilenleriYukle();
   gecmisiYukle();
   menuAdresleriniGuncelle();
   // Sayfa açılışındaki aramada link videoyu kendiliğinden açmaz, listede gösterir.

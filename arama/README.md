@@ -58,17 +58,28 @@ Ortam değişkenleri:
 - **Arama:** Enter ile arar, "Daha fazla göster" ile sonraki sayfayı getirir. Arama kutusuna
   tıklayınca son aramalar önerilir (ok tuşlarıyla seçilebilir, tek tek ya da toplu silinebilir).
   YouTube linki yapıştırılırsa video doğrudan açılır.
-- **Adresler:** `/`, `/?q=arama`, `/gecmis`, `/ayarlar`. Tarayıcının geri/ileri tuşları ve
+- **Adresler:** `/`, `/?q=arama`, `/kaydedilenler`, `/gecmis`, `/ayarlar`. Tarayıcının geri/ileri tuşları ve
   sayfa yenileme çalışır; aramalar paylaşılabilir.
 - **Oynatma:** YouTube IFrame oynatıcısı (`youtube-nocookie.com`), yalnızca ilk video
   seçildiğinde yüklenir. Altında "şimdi oynuyor" bilgisi ile YouTube'da aç, linki kopyala ve
   kapat düğmeleri var. İzlerken konum ve ilerleme tarayıcıya kaydedilir; "Kaldığım yerden
   devam et" açıksa video oradan başlar ("Baştan başlat" ile sıfırlanabilir).
+- **Kaydedilenler (daha sonra izle):** Her videonun yanındaki kaydet simgesiyle ya da
+  oynatıcının altındaki düğmeyle eklenir; ayrı sayfada listelenir, "Tümünü oynat" ile sırayla
+  izlenir.
+- **Sıradaki:** Video hangi listeden açıldıysa (arama sonuçları, kaydedilenler, geçmiş)
+  oynatıcının altında sıradaki video gösterilir. Video bitince 5 sn geri sayımla sıradaki başlar
+  (bildirimden iptal edilebilir; Ayarlar → "Sıradakini otomatik oynat" ile kapatılabilir).
+- **Paylaşma:** Telefonlarda sistemin paylaş menüsü açılır, diğer cihazlarda link kopyalanır.
+- **Yedekle / taşı:** Ayarlar → Veriler'den geçmiş, kaydedilenler, son aramalar ve ayarlar JSON
+  dosyası olarak indirilebilir ve başka bir tarayıcıya yüklenebilir (yükleme geri alınabilir).
 - **İzlemeye devam et:** Ana sayfada (arama yokken) son izlenenler, kalan süreyle birlikte.
 - **Geçmiş:** Gün gruplarına ayrılmış liste, geçmişte arama, tek tek silme ve tümünü
   temizleme; ikisi de bildirimdeki "Geri al" ile geri alınabilir.
-- **Klavye:** `/` arama kutusu · `K` oynat/duraklat · `Esc` öneri listesini kapat ·
-  sonuçlar ve kartlar Tab + Enter ile açılır · geçmişte seçili satır `Delete` ile silinir.
+- **Klavye:** `/` arama kutusu · `K` oynat/duraklat · `J` / `L` 10 sn geri/ileri ·
+  `N` sıradaki video · `Esc` öneri listesini kapat ·
+  sonuçlar ve kartlar Tab + Enter ile açılır · geçmişte ve kaydedilenlerde seçili satır
+  `Delete` ile kaldırılır.
 - Açık, koyu ve sistem teması; telefon, tablet ve masaüstü düzeni.
 - Aynı sitenin açık diğer sekmeleri geçmiş ve ayar değişikliklerini anında görür.
 - "Otomatik oynat" kapalıyken seçilen video yalnızca yüklenir, oynat tuşuna basman gerekir.
@@ -96,4 +107,5 @@ Hatalar `{ "hata": "..." }` biçiminde ve uygun HTTP koduyla döner.
 | ----------------------- | ------------------------------------------------------------- |
 | `arama.gecmis`          | İzleme geçmişi (en fazla 200 video; konum ve ilerleme dahil) |
 | `arama.ayarlar`         | Tema, oynatma ve diğer ayarlar                                |
+| `arama.kaydedilenler`   | Daha sonra izle listesi (en fazla 500 video)                  |
 | `arama.sonAramalar`     | Son 10 arama (arama kutusu önerileri)                         |

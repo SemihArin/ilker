@@ -339,7 +339,7 @@
     max-width: 720px;
   }
   .page-title { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
-  .page-sub { margin: -8px 0 0; font-size: 14px; opacity: 0.6; }
+  .page-sub { margin: 2px 0 0; font-size: 14px; opacity: 0.6; }
   .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .section-title {
     margin: 10px 0 0;
@@ -543,7 +543,8 @@
   .card-img { position: relative; overflow: hidden; }
   .card-img img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .result.playing .result-title { color: var(--accent); }
-  .result-meta { font-size: 12px; opacity: 0.6; margin-top: 2px; }
+  .result-meta { font-size: 12px; opacity: 0.6; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .result-channel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .duration.live { background: #dc2626; }
   .btn-ghost { align-self: center; color: var(--accent); background: rgba(37, 99, 235, 0.12); }
   .btn:disabled { opacity: 0.5; cursor: default; }
@@ -823,6 +824,73 @@
   /* Ayarlar */
   .row .link { padding: 4px 0; font-size: 14px; }
 
+
+  /* ==== Kaydedilenler, sıradaki, satır eylemleri ==== */
+  .result-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: none;
+    margin-left: auto;
+  }
+  .row-btn {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: var(--fg);
+    background: none;
+    border: 0;
+    border-radius: 50%;
+    opacity: 0.45;
+    cursor: pointer;
+    transition: opacity 0.15s, background 0.15s, color 0.15s;
+  }
+  .row-btn:hover { opacity: 1; background: rgba(127, 127, 127, 0.16); }
+  .row-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .row-btn.on, .icon-btn.on { color: var(--accent); opacity: 1; }
+  .row-btn.on svg, .icon-btn.on svg { fill: currentColor; }
+  @media (hover: hover) {
+    .result .row-btn.save-btn:not(.on) { opacity: 0; }
+    .result:hover .row-btn.save-btn, .result:focus-within .row-btn.save-btn { opacity: 0.45; }
+    .result:hover .row-btn.save-btn:hover { opacity: 1; }
+  }
+  .result > div:nth-child(2) { flex: 1; min-width: 0; }
+  #gecmis-listesi .result > div:last-of-type { padding-right: 0; }
+
+  .next {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 600px;
+    padding: 8px 8px 8px 12px;
+    margin-top: -8px;
+    font: inherit;
+    text-align: left;
+    color: var(--fg);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .next:hover { background: rgba(127, 127, 127, 0.12); }
+  .next-label { flex: none; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.55; }
+  .next-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .next img { flex: none; width: 64px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: rgba(127, 127, 127, 0.2); }
+  .next svg { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0.6; }
+
+  .head-actions { display: flex; align-items: center; gap: 8px; }
+  .head-actions .btn { padding: 8px 16px; font-size: 14px; }
+  .head-actions .btn svg { width: 14px; height: 14px; margin: 0 6px -1px 0; fill: currentColor; }
+  .menu a span { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .row .row-actions { display: flex; gap: 12px; flex: none; }
+  @media (min-width: 900px) {
+    .next { max-width: none; margin-top: -8px; }
+  }
+
   /* Menü markası (masaüstü) */
   .brand { display: none; }
 
@@ -955,6 +1023,9 @@
           <a class="icon-btn" id="youtubeda-ac" href="#" target="_blank" rel="noopener noreferrer" title="YouTube’da aç" aria-label="YouTube’da aç">
             <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
           </a>
+          <button class="icon-btn" id="simdi-kaydet" type="button" title="Daha sonra izle" aria-label="Daha sonra izle" aria-pressed="false">
+            <svg viewBox="0 0 24 24"><path d="M6 4h12v17l-6-4-6 4z"/></svg>
+          </button>
           <button class="icon-btn" id="linki-kopyala" type="button" title="Linki kopyala" aria-label="Linki kopyala">
             <svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
           </button>
@@ -963,6 +1034,12 @@
           </button>
         </div>
       </div>
+      <button class="next" id="siradaki" type="button" hidden>
+        <span class="next-label">Sıradaki</span>
+        <img id="siradaki-resim" alt="" referrerpolicy="no-referrer">
+        <span class="next-title" id="siradaki-baslik"></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5l8 7-8 7zM18 5v14"/></svg>
+      </button>
     </div>
 
     <div class="results-col">
@@ -986,6 +1063,22 @@
     </div>
   </section>
 
+  <section class="page" id="p-kaydedilenler" hidden>
+    <div class="narrow">
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Kaydedilenler</h1>
+          <p class="page-sub" id="kaydedilen-sayisi"></p>
+        </div>
+        <div class="head-actions" id="kaydedilen-eylemler">
+          <button class="link" type="button" id="kaydedilenleri-temizle">Tümünü kaldır</button>
+          <button class="btn" type="button" id="hepsini-oynat"><svg viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg>Tümünü oynat</button>
+        </div>
+      </div>
+      <div class="list" id="kaydedilen-listesi"></div>
+    </div>
+  </section>
+
   <section class="page" id="p-ayarlar" hidden>
     <div class="narrow">
       <h1 class="page-title">Ayarlar</h1>
@@ -997,12 +1090,15 @@
       <div class="panel group">
         <div class="row"><div>Otomatik oynat<small>Seçilen video hemen başlasın</small></div><label class="switch"><input type="checkbox" data-ayar="otomatikOynat"><span class="track"></span></label></div>
         <div class="row"><div>Kaldığım yerden devam et<small>Daha önce açtığın videolar kaldığın saniyeden başlasın</small></div><label class="switch"><input type="checkbox" data-ayar="kaldigimYerdenDevam" checked><span class="track"></span></label></div>
+        <div class="row"><div>Sıradakini otomatik oynat<small>Video bitince listedeki sonraki video 5 sn sonra başlasın</small></div><label class="switch"><input type="checkbox" data-ayar="siradakiniOynat" checked><span class="track"></span></label></div>
         <div class="row"><div>Geçmişi kaydet<small>İzlediğin videolar bu tarayıcıda saklansın</small></div><label class="switch"><input type="checkbox" data-ayar="gecmisiKaydet" checked><span class="track"></span></label></div>
       </div>
       <h2 class="section-title">Veriler</h2>
       <div class="panel group">
         <div class="row"><div>Son aramalar<small>Arama kutusunda önerilen son aramaların</small></div><button class="link" type="button" id="aramalari-temizle">Temizle</button></div>
         <div class="row"><div>İzleme geçmişi<small>Tüm veriler yalnızca bu tarayıcıda tutulur</small></div><button class="link" type="button" id="ayarlardan-gecmisi-temizle">Temizle</button></div>
+        <div class="row"><div>Yedekle / taşı<small>Geçmiş, kaydedilenler ve ayarları dosya olarak al ya da geri yükle</small></div><div class="row-actions"><button class="link" type="button" id="disa-aktar">Dışa aktar</button><button class="link" type="button" id="ice-aktar">İçe aktar</button></div></div>
+        <input type="file" id="ice-aktar-dosya" accept="application/json,.json" hidden>
       </div>
       <h2 class="section-title">Ortak İzleme</h2>
       <div class="panel group">
@@ -1011,8 +1107,8 @@
       </div>
       <h2 class="section-title">Hakkında</h2>
       <div class="panel group">
-        <div class="row"><div>Sürüm</div><span class="value">0.2</span></div>
-        <div class="row"><div>Klavye kısayolları<small>/ arama · Esc kapat · K oynat/duraklat</small></div></div>
+        <div class="row"><div>Sürüm</div><span class="value">0.3</span></div>
+        <div class="row"><div>Klavye kısayolları<small>/ arama · K oynat/duraklat · J / L 10 sn geri/ileri · N sıradaki · Esc kapat</small></div></div>
       </div>
     </div>
   </section>
@@ -1022,6 +1118,10 @@
     <a href="#" data-page="home" class="active" aria-current="page">
       <svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
       <span>Ana Sayfa</span>
+    </a>
+    <a href="#" data-page="kaydedilenler">
+      <svg viewBox="0 0 24 24"><path d="M6 4h12v17l-6-4-6 4z"/></svg>
+      <span>Kaydedilenler</span>
     </a>
     <a href="#" data-page="gecmis">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
