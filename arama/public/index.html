@@ -605,7 +605,7 @@
 </style>
 <script>
   try {
-    var t = localStorage.getItem('tema');
+    var t = (JSON.parse(localStorage.getItem('arama.ayarlar') || '{}') || {}).tema;
     if (t === 'acik') document.documentElement.dataset.theme = 'light';
     else if (t === 'koyu') document.documentElement.dataset.theme = 'dark';
   } catch (e) {}

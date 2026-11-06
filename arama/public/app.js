@@ -5,19 +5,75 @@
   var gecmis = [];
   var gecmisHaritasi = {};
 
+  // ---------------- Yerel depo (localStorage) ----------------
+  // Geçmiş ve ayarlar yalnızca bu tarayıcıda tutulur; sunucuya gönderilmez.
+
+  var ANAHTAR_GECMIS = 'arama.gecmis';
+  var ANAHTAR_AYARLAR = 'arama.ayarlar';
+  var GECMIS_SINIRI = 200;
+  var VIDEO_KIMLIGI = /^[A-Za-z0-9_-]{11}$/;
+  var VARSAYILAN_AYARLAR = {
+    tema: 'sistem', // 'sistem' | 'acik' | 'koyu'
+    otomatikOynat: false,
+    kaldigimYerdenDevam: true,
+    gecmisiKaydet: true,
+    davetleriKabulEt: true,
+    kullaniciAdi: 'Misafir',
+  };
+
+  var depolamaUyarildi = false;
+  function yerelOku(anahtar) {
+    try {
+      var ham = localStorage.getItem(anahtar);
+      return ham ? JSON.parse(ham) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function yerelYaz(anahtar, deger) {
+    try {
+      localStorage.setItem(anahtar, JSON.stringify(deger));
+      return true;
+    } catch (e) {
+      if (!depolamaUyarildi) {
+        depolamaUyarildi = true;
+        bildir('Tarayıcı depolaması kullanılamıyor; değişiklikler kaydedilmeyecek');
+      }
+      return false;
+    }
+  }
+
+  function ayarlariOku() {
+    var ham = yerelOku(ANAHTAR_AYARLAR) || {};
+    var a = {};
+    Object.keys(VARSAYILAN_AYARLAR).forEach(function (k) {
+      var v = ham[k];
+      var varsayilan = VARSAYILAN_AYARLAR[k];
+      a[k] = typeof v === typeof varsayilan ? v : varsayilan;
+    });
+    if (['sistem', 'acik', 'koyu'].indexOf(a.tema) < 0) a.tema = 'sistem';
+    a.kullaniciAdi = String(a.kullaniciAdi).trim().slice(0, 32) || VARSAYILAN_AYARLAR.kullaniciAdi;
+    return a;
+  }
+
+  function gecmisiOku() {
+    var ham = yerelOku(ANAHTAR_GECMIS);
+    return (Array.isArray(ham) ? ham : [])
+      .filter(function (k) {
+        return k && typeof k.id === 'string' && VIDEO_KIMLIGI.test(k.id) && typeof k.izlenme === 'string' && typeof k.baslik === 'string';
+      })
+      .sort(function (a, b) { return b.izlenme < a.izlenme ? -1 : b.izlenme > a.izlenme ? 1 : 0; });
+  }
+
+  function gecmisiYaz(liste) {
+    return yerelYaz(ANAHTAR_GECMIS, liste.slice(0, GECMIS_SINIRI));
+  }
+
   // ---------------- Yardımcılar ----------------
 
-  function api(yol, secenek) {
-    secenek = secenek || {};
-    var basliklar = {};
-    if (secenek.govde !== undefined) basliklar['Content-Type'] = 'application/json';
-    return fetch('/api' + yol, {
-      method: secenek.yontem || 'GET',
-      headers: basliklar,
-      body: secenek.govde !== undefined ? JSON.stringify(secenek.govde) : undefined,
-      keepalive: !!secenek.keepalive,
-    }).then(function (yanit) {
-      if (yanit.status === 204) return null;
+  // Sunucuya yalnızca arama istekleri gider.
+  function api(yol) {
+    return fetch('/api' + yol).then(function (yanit) {
       return yanit.json().catch(function () { return {}; }).then(function (veri) {
         if (!yanit.ok) {
           var hata = new Error(veri.hata || 'İstek başarısız (' + yanit.status + ')');
@@ -239,10 +295,9 @@
   }
 
   function gecmisiYukle() {
-    return api('/gecmis').then(function (liste) {
-      gecmisiAyarla(liste);
-      gecmisiCiz();
-    });
+    gecmisiAyarla(gecmisiOku());
+    gecmisiCiz();
+    oynayanIsaretle();
   }
 
   // ---------------- Arama ----------------
@@ -299,7 +354,7 @@
       arama.sonrakiSayfa = null;
       arama.hata = null;
       sonucHaritasi = {};
-      try { if (q) localStorage.setItem('sonArama', q); else localStorage.removeItem('sonArama'); } catch (e) {}
+      try { if (q) localStorage.setItem('arama.sonArama', q); else localStorage.removeItem('arama.sonArama'); } catch (e) {}
       var url = new URL(location.href);
       if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
       history.replaceState(null, '', url);
@@ -450,17 +505,28 @@
 
   function gecmiseEkle(video) {
     if (ayarlar && !ayarlar.gecmisiKaydet) return;
-    var govde = { id: video.id, baslik: video.baslik };
-    if (video.kanal) govde.kanal = video.kanal;
-    if (video.sure) govde.sure = video.sure;
-    if (video.kucukResim) govde.kucukResim = video.kucukResim;
-    api('/gecmis', { yontem: 'POST', govde: govde })
-      .then(gecmisiYukle)
-      .catch(function (err) { bildir(err.message); });
+    var liste = gecmisiOku();
+    var eski = null;
+    liste = liste.filter(function (k) {
+      if (k.id === video.id) { eski = k; return false; }
+      return true;
+    });
+    liste.unshift({
+      id: video.id,
+      baslik: video.baslik,
+      kanal: video.kanal || (eski && eski.kanal) || '',
+      sure: video.sure || (eski && eski.sure) || '',
+      kucukResim: video.kucukResim || (eski && eski.kucukResim) || '',
+      ilerleme: eski ? eski.ilerleme || 0 : 0,
+      konum: eski ? eski.konum || 0 : 0,
+      izlenme: new Date().toISOString(),
+    });
+    gecmisiYaz(liste);
+    gecmisiYukle();
   }
 
-  // İzleme ilerlemesini sunucuya yazar (oynarken en sık 10 sn'de bir).
-  function ilerlemeKaydet(hemen, cikis) {
+  // İzleme ilerlemesini yerel geçmişe yazar (oynarken en sık 5 sn'de bir).
+  function ilerlemeKaydet(hemen) {
     if (!aktif || !oynaticiHazir || !oynatici.getDuration) return;
     if (ayarlar && !ayarlar.gecmisiKaydet) return;
     if (!gecmisHaritasi[aktif.id]) return;
@@ -469,29 +535,42 @@
     if (!toplam || !(konum >= 0)) return;
     if (oynatici.getVideoData && oynatici.getVideoData().video_id !== aktif.id) return;
     var simdi = Date.now();
-    if (!hemen && simdi - sonKayit < 10000) return;
+    if (!hemen && simdi - sonKayit < 5000) return;
     sonKayit = simdi;
     var ilerleme = Math.min(100, Math.round((konum / toplam) * 100));
     if (oynatici.getPlayerState() === YT.PlayerState.ENDED) ilerleme = 100;
-    var govde = { ilerleme: ilerleme, konum: Math.floor(konum) };
-    var kayit = gecmisHaritasi[aktif.id];
-    if (!kayit.sure && toplam > 0 && !aktif.canli) govde.sure = sureMetni(toplam);
-    if (kayit.ilerleme === govde.ilerleme && kayit.konum === govde.konum && !govde.sure) return;
-    // Yerel kopyayı hemen güncelle ki çubuklar anında değişsin.
-    kayit.ilerleme = govde.ilerleme;
-    kayit.konum = govde.konum;
-    if (govde.sure) kayit.sure = govde.sure;
-    var istek = api('/gecmis/' + encodeURIComponent(aktif.id), { yontem: 'PATCH', govde: govde, keepalive: !!cikis });
-    if (!cikis) istek.then(function () { gecmisiCiz(); oynayanIsaretle(); }).catch(function () {});
+    konum = Math.floor(konum);
+
+    // Başka sekmede değişmiş olabilir: güncel listeyi okuyup yalnızca bu kaydı güncelle.
+    var liste = gecmisiOku();
+    var kayit = liste.filter(function (k) { return k.id === aktif.id; })[0];
+    if (!kayit) return;
+    var sureYok = !kayit.sure && !aktif.canli;
+    if (kayit.ilerleme === ilerleme && kayit.konum === konum && !sureYok) return;
+    kayit.ilerleme = ilerleme;
+    kayit.konum = konum;
+    if (sureYok) kayit.sure = sureMetni(toplam);
+    gecmisiYaz(liste);
+    gecmisiYukle();
   }
 
   setInterval(function () {
     if (oynaticiHazir && oynatici.getPlayerState && oynatici.getPlayerState() === YT.PlayerState.PLAYING) ilerlemeKaydet(false);
   }, 2000);
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'hidden') ilerlemeKaydet(true, true);
+    if (document.visibilityState === 'hidden') ilerlemeKaydet(true);
   });
-  window.addEventListener('pagehide', function () { ilerlemeKaydet(true, true); });
+  window.addEventListener('pagehide', function () { ilerlemeKaydet(true); });
+
+  // Başka bir sekmede geçmiş ya da ayarlar değişirse bu sekmeyi de güncelle.
+  window.addEventListener('storage', function (e) {
+    if (e.key === ANAHTAR_GECMIS) gecmisiYukle();
+    if (e.key === ANAHTAR_AYARLAR) {
+      ayarlar = ayarlariOku();
+      ayarlariFormaYaz();
+      gecmisiYukle();
+    }
+  });
 
   // ---------------- Tıklamalar ----------------
 
@@ -524,12 +603,9 @@
   tiklaVeKlavye($('gecmis-listesi'), '.result[data-id]', function (s, e) {
     var id = s.dataset.id;
     if (e.target.closest('.remove')) {
-      api('/gecmis/' + encodeURIComponent(id), { yontem: 'DELETE' })
-        .then(function () {
-          bildir('Geçmişten kaldırıldı');
-          return gecmisiYukle();
-        })
-        .catch(function (err) { bildir(err.message); });
+      gecmisiYaz(gecmisiOku().filter(function (k) { return k.id !== id; }));
+      gecmisiYukle();
+      bildir('Geçmişten kaldırıldı');
       return;
     }
     var k = gecmisHaritasi[id];
@@ -538,12 +614,9 @@
 
   $('gecmisi-temizle').addEventListener('click', function () {
     if (!confirm('Tüm izleme geçmişi silinsin mi?')) return;
-    api('/gecmis', { yontem: 'DELETE' })
-      .then(function () {
-        bildir('Geçmiş temizlendi');
-        return gecmisiYukle();
-      })
-      .catch(function (err) { bildir(err.message); });
+    gecmisiYaz([]);
+    gecmisiYukle();
+    bildir('Geçmiş temizlendi');
   });
 
   // ---------------- Ayarlar ----------------
@@ -553,7 +626,6 @@
     if (tema === 'acik') kok.dataset.theme = 'light';
     else if (tema === 'koyu') kok.dataset.theme = 'dark';
     else delete kok.dataset.theme;
-    try { localStorage.setItem('tema', tema); } catch (e) {}
   }
 
   function ayarlariFormaYaz() {
@@ -569,24 +641,15 @@
   }
 
   function ayarKaydet(degisiklik) {
-    return api('/ayarlar', { yontem: 'PATCH', govde: degisiklik })
-      .then(function (yeni) {
-        ayarlar = yeni;
-        ayarlariFormaYaz();
-        gecmisiCiz();
-        oynayanIsaretle();
-      })
-      .catch(function (err) {
-        bildir(err.message);
-        if (ayarlar) ayarlariFormaYaz(); // eski değerlere dön
-        throw err;
-      });
+    Object.keys(degisiklik).forEach(function (k) { ayarlar[k] = degisiklik[k]; });
+    yerelYaz(ANAHTAR_AYARLAR, ayarlar);
+    ayarlariFormaYaz();
+    gecmisiYukle();
   }
 
   document.querySelectorAll('input[name="tema"]').forEach(function (r) {
     r.addEventListener('change', function () {
-      temayiUygula(r.value);
-      ayarKaydet({ tema: r.value }).catch(function () {});
+      ayarKaydet({ tema: r.value });
     });
   });
 
@@ -594,7 +657,7 @@
     kutu.addEventListener('change', function () {
       var d = {};
       d[kutu.dataset.ayar] = kutu.checked;
-      ayarKaydet(d).catch(function () {});
+      ayarKaydet(d);
     });
   });
 
@@ -605,7 +668,8 @@
       adGirdisi.value = ayarlar ? ayarlar.kullaniciAdi : 'Misafir';
       return;
     }
-    ayarKaydet({ kullaniciAdi: ad }).then(function () { bildir('Kullanıcı adı kaydedildi'); }, function () {});
+    ayarKaydet({ kullaniciAdi: ad.slice(0, 32) });
+    bildir('Kullanıcı adı kaydedildi');
   });
   adGirdisi.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') adGirdisi.blur();
@@ -617,28 +681,17 @@
 
   var ilkSorgu = new URL(location.href).searchParams.get('q');
   if (ilkSorgu === null) {
-    try { ilkSorgu = localStorage.getItem('sonArama'); } catch (e) {}
+    try { ilkSorgu = localStorage.getItem('arama.sonArama'); } catch (e) {}
   }
   ilkSorgu = (ilkSorgu || '').trim();
   aramaKutusu.value = ilkSorgu;
 
-  api('/ayarlar')
-    .then(function (a) {
-      ayarlar = a;
-      ayarlariFormaYaz();
-      return gecmisiYukle();
-    })
-    .then(function () {
-      // Son izlenen videoyu kaldığı yerden hazırla (otomatik başlatmaz).
-      if (gecmis.length && !aktif) videoAc(gecmis[0]);
-    })
-    .catch(function () {
-      bildir('Sunucuya bağlanılamadı');
-      gecmisiCiz();
-    })
-    .then(function () {
-      // Sayfa açılışındaki aramada link videoyu kendiliğinden açmaz, listede gösterir.
-      if (ilkSorgu) aramaYap(ilkSorgu);
-      else sonuclariCiz();
-    });
+  ayarlar = ayarlariOku();
+  ayarlariFormaYaz();
+  gecmisiYukle();
+  // Son izlenen videoyu kaldığı yerden hazırla (otomatik başlatmaz).
+  if (gecmis.length) videoAc(gecmis[0]);
+  // Sayfa açılışındaki aramada link videoyu kendiliğinden açmaz, listede gösterir.
+  if (ilkSorgu) aramaYap(ilkSorgu);
+  else sonuclariCiz();
 })();
