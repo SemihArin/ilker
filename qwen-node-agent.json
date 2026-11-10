@@ -1,0 +1,95 @@
+{
+  "project": {
+    "name": "Termux Local AI Autonomous File Agent",
+    "codename": "QwenNodeAgent",
+    "version": "1.0.0",
+    "author": "Semih",
+    "description": "Redmi Note 12 Pro 5G cihazı üzerinde Termux PRoot Ubuntu ortamında çalışan, Ollama qwen2.5:7b yerel LLM tabanlı, otomatik dosya okuma, yazma ve düzenleme yeteneğine sahip otonom geliştirici ajan mimarisi."
+  },
+  "environment": {
+    "hardware": {
+      "device": "Xiaomi Redmi Note 12 Pro 5G",
+      "soc": "MediaTek Dimensity 1080 (64-bit arm64)",
+      "ram": "8 GB / 12 GB",
+      "os_environment": "Android / Termux (PRoot Ubuntu)"
+    },
+    "software_stack": {
+      "llm_engine": "Ollama (0.40.16+)",
+      "model_name": "qwen2.5:7b",
+      "runtime": "Node.js (v18+)",
+      "execution_mode": "Local REST API (127.0.0.1:11434)"
+    }
+  },
+  "llm_configuration": {
+    "model": "qwen2.5:7b",
+    "quantization": "Q4_K_M",
+    "num_ctx": 4096,
+    "temperature": 0.3,
+    "system_prompt": "Sen yerel dosyaları okuma, yazma ve düzenleme yetkisine sahip kıdemli bir yazılım ajanısın. Dosya işlemleri için [WRITE: path]...[/WRITE], [READ: path], [LIST: path] etiketlerini kullanırsın."
+  },
+  "tools_and_capabilities": [
+    {
+      "tool_name": "WRITE_FILE",
+      "syntax": "[WRITE: dosya_yolu]\n...icerik...\n[/WRITE]",
+      "description": "Belirtilen dizinde yeni dosya oluşturur veya var olan dosyayı verilen içerikle günceller.",
+      "native_handler": "fs.writeFileSync / fs.mkdirSync"
+    },
+    {
+      "tool_name": "READ_FILE",
+      "syntax": "[READ: dosya_yolu]",
+      "description": "Belirtilen dosyayı okur ve içeriğini sistem notu olarak LLM sohbet geçmişine aktarır.",
+      "native_handler": "fs.readFileSync"
+    },
+    {
+      "tool_name": "LIST_DIRECTORY",
+      "syntax": "[LIST: dizin_yolu]",
+      "description": "Belirtilen dizindeki dosya ve klasörleri listeleyip ajanın bilgisine sunar.",
+      "native_handler": "fs.readdirSync"
+    }
+  ],
+  "execution_workflow": [
+    {
+      "step": 1,
+      "action": "Kullanıcı İstemi",
+      "details": "Kullanıcı terminalden doğal dilde talimat verir (Örn: 'index.html oluştur ve düzenle')."
+    },
+    {
+      "step": 2,
+      "action": "Bağlam Hazırlama",
+      "details": "Node.js uygulaması System Prompt, geçmiş konuşmalar ve kullanıcı istemini birleştirerek Ollama REST API'sine istek gönderir."
+    },
+    {
+      "step": 3,
+      "action": "LLM Çıkarımı (Inference)",
+      "details": "qwen2.5:7b modeli yanıt üretir ve dosya işlemi gerekiyorsa özel etiketler ([WRITE], [READ], [LIST]) ekler."
+    },
+    {
+      "step": 4,
+      "action": "Etiket Yakalama ve Dosya İşleme",
+      "details": "Node.js RegEx motoru yanıtı ayrıştırır; dosya oluşturma/okuma/güncelleme işlemlerini anında yerel dosya sisteminde gerçekleştirir."
+    },
+    {
+      "step": 5,
+      "action": "Geri Bildirim Döngüsü",
+      "details": "İşlem sonucu (başarılı/hata) konsola yazdırılır ve bir sonraki tur için sohbet geçmişine dahil edilir."
+    }
+  ],
+  "key_advantages": [
+    "%100 Yerel ve Gizli (İnternet bağlantısı gerektirmez, veri dışarı çıkmaz)",
+    "Sıfır API Maliyeti",
+    "Otonom Kendi Kendine Kod Yazma ve Hata Düzeltme Kapasitesi",
+    "Kesintisiz Yerel Ağ Erişimi (0.0.0.0 API Entegrasyon imkanı)"
+  ],
+  "installation": {
+    "setup_file": "install.sh",
+    "agent_file": "agent.js",
+    "one_line_command": "curl -fsSL https://raw.githubusercontent.com/SemihArin/ilker/main/install.sh | bash",
+    "run_command": "qwen-agent",
+    "what_it_does": [
+      "curl, Node.js 18+ ve Ollama'yı kurar (PRoot Ubuntu'da apt, doğrudan Termux'ta pkg)",
+      "agent.js dosyasını ~/.qwen-node-agent dizinine indirir",
+      "Ollama kapalıysa başlatan 'qwen-agent' komutunu ekler",
+      "qwen2.5:7b modelini indirir (~4.7 GB)"
+    ]
+  }
+}
