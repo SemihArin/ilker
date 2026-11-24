@@ -615,6 +615,15 @@ html.no-anim *,html.no-anim *::before,html.no-anim *::after{animation:none !impo
 .list-item .ico.em{font-size:17px;width:18px;text-align:center;}
 .list-item .tx .t,.list-item .tx .s,.qbtn .lbl,.qbtn .sub2{display:block;}
 
+#logForm:not(.show-extra) .log-extra{display:none;}
+details.more-settings{margin-top:14px;}
+details.more-settings > summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:14px 16px;border-radius:var(--r-md);background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-1);
+  font-size:13.5px;font-weight:650;}
+details.more-settings > summary::-webkit-details-marker{display:none;}
+details.more-settings > summary .s{font-size:11.5px;color:var(--ink-3);font-weight:550;}
+details.more-settings[open] > summary .s{display:none;}
+
 /* Misc */
 .mt10{margin-top:10px;} .mt14{margin-top:14px;} .mt18{margin-top:18px;}
 .hidden{display:none !important;}
@@ -749,6 +758,7 @@ html.no-anim *,html.no-anim *::before,html.no-anim *::after{animation:none !impo
           </span>
           <p><b>Tahminler kesin değildir.</b> Bu uygulama tıbbi tanı aracı ya da doğum kontrol yöntemi değildir.</p>
         </div>
+        <button class="add-row-btn mt14" id="editHomeBtn">✏️ Ana sayfaya kart ekle / çıkar</button>
       </div>
     </section>
 
@@ -918,8 +928,9 @@ function defaultState(){
       fontScale: "md",
       animations: true,
       haptics: true,
-      homeWidgets: ["week","countdown","ovu","actions","moods","symptoms","tip","minical","summary","accuracy"],
-      hiddenWidgets: [],
+      homeWidgets: ["countdown","actions","moods","week","ovu","symptoms","tip","minical","summary","accuracy"],
+      hiddenWidgets: ["ovu","symptoms","tip","minical","summary","accuracy"],
+      simpleLayout: true,
       quickMoods: ["Mutlu","Üzgün","Sinirli","Stresli","Yorgun","Enerjik","Hassas"],
       quickSymptoms: ["Karın ağrısı","Baş ağrısı","Şişkinlik","Yorgunluk","Bel ağrısı","Göğüs hassasiyeti"],
       customSymptoms: []
@@ -958,7 +969,7 @@ function migrate(data){
     });
     p.version = 3;
   }
-  return {
+  const out = {
     version: 3,
     onboardingComplete: !!(data.onboardingComplete !== undefined ? data.onboardingComplete : true),
     profile: Object.assign({}, d.profile, p.profile || {}, {
@@ -968,6 +979,13 @@ function migrate(data){
     dailyLogs: Array.isArray(p.dailyLogs) ? p.dailyLogs : [],
     settings: Object.assign({}, d.settings, p.settings || {})
   };
+  // Eski kayıtlarda bir kereliğine sade ana sayfa düzenine geç
+  if (!(p.profile && p.profile.simpleLayout)){
+    out.profile.homeWidgets = d.profile.homeWidgets.slice();
+    out.profile.hiddenWidgets = d.profile.hiddenWidgets.slice();
+    out.profile.simpleLayout = true;
+  }
+  return out;
 }
 
 let state;
@@ -1487,6 +1505,7 @@ function renderHome(){
   renderWeekStrip(today, p);
   renderTip(pk);
   applyHomeLayout();
+  $("#editHomeBtn").onclick = openHomeLayoutSheet;
 
   // Regl bitti butonu
   const peW = $("#periodEndWrap");
@@ -1894,7 +1913,7 @@ function buildLogForm(){
     </div>
   </details>
 
-  <details class="sec">
+  <details class="sec log-extra">
     <summary><span class="sec-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a7 7 0 0 0 7-7c0-4.5-7-11-7-11S5 9.5 5 14a7 7 0 0 0 7 7Z"/></svg></span>
       <span class="sec-name">Servikal Mukus</span><span class="sec-state" data-state="mucus"></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
@@ -1933,7 +1952,7 @@ function buildLogForm(){
     </div>
   </details>
 
-  <details class="sec">
+  <details class="sec log-extra">
     <summary><span class="sec-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg></span>
       <span class="sec-name">Enerji ve Zihin</span><span class="sec-state" data-state="energy"></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
@@ -1946,7 +1965,7 @@ function buildLogForm(){
     </div>
   </details>
 
-  <details class="sec">
+  <details class="sec log-extra">
     <summary><span class="sec-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a8 8 0 0 1 16 0"/><path d="M12 14V9"/><circle cx="12" cy="14" r="1.2" fill="currentColor"/></svg></span>
       <span class="sec-name">Ölçümler ve Sıcaklık</span><span class="sec-state" data-state="measure"></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
@@ -1962,7 +1981,7 @@ function buildLogForm(){
     </div>
   </details>
 
-  <details class="sec">
+  <details class="sec log-extra">
     <summary><span class="sec-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.2 6 10.2A6 6 0 0 1 6 13.2C6 9.2 12 3 12 3Z"/></svg></span>
       <span class="sec-name">Su Tüketimi</span><span class="sec-state" data-state="water"></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
@@ -1979,7 +1998,7 @@ function buildLogForm(){
     </div>
   </details>
 
-  <details class="sec">
+  <details class="sec log-extra">
     <summary><span class="sec-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5Z"/></svg></span>
       <span class="sec-name">Uyku</span><span class="sec-state" data-state="sleep"></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
@@ -1995,7 +2014,7 @@ function buildLogForm(){
     </div>
   </details>
 
-  <details class="sec">
+  <details class="sec log-extra">
     <summary><span class="sec-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v8a3 3 0 0 0 6 0V3"/><path d="M9 11v10"/><path d="M17 3c-1.5 2-2 4-2 6s.5 3 2 3 2-1 2-3-.5-4-2-6Z"/><path d="M17 12v9"/></svg></span>
       <span class="sec-name">Beslenme</span><span class="sec-state" data-state="nutrition"></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
@@ -2010,7 +2029,7 @@ function buildLogForm(){
     </div>
   </details>
 
-  <details class="sec">
+  <details class="sec log-extra">
     <summary><span class="sec-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="15" cy="5" r="2"/><path d="M8 21l2-5 3-2-1-5-3 2-2 3"/><path d="M13 14l3 2 1 5"/></svg></span>
       <span class="sec-name">Hareket</span><span class="sec-state" data-state="activity"></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
@@ -2023,7 +2042,7 @@ function buildLogForm(){
   </details>
 
   ${state.profile.hideIntimacy ? "" : `
-  <details class="sec">
+  <details class="sec log-extra">
     <summary><span class="sec-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-9.3A4.2 4.2 0 0 1 12 7a4.2 4.2 0 0 1 7 3.7c0 4.9-7 9.3-7 9.3Z"/></svg></span>
       <span class="sec-name">Cinsel Sağlık</span><span class="sec-state" data-state="intimacy"></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
@@ -2033,7 +2052,7 @@ function buildLogForm(){
     </div>
   </details>`}
 
-  <details class="sec">
+  <details class="sec log-extra">
     <summary><span class="sec-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="4" transform="rotate(-45 12 12)"/><path d="M8.5 15.5 15.5 8.5"/></svg></span>
       <span class="sec-name">İlaç ve Takviye</span><span class="sec-state" data-state="meds"></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
@@ -2057,7 +2076,9 @@ function buildLogForm(){
       }).join("")}</div></div>
     </div>
   </details>
+  <button type="button" class="add-row-btn mt14" id="toggleExtra">${state.profile.showAllLogFields ? "▲ Daha az alan göster" : "▼ Daha fazla alan (mukus, uyku, su, ölçüm, ilaç…)"}</button>
   `;
+  f.classList.toggle("show-extra", !!state.profile.showAllLogFields);
   renderSymptomDetails();
   renderSleepTotal();
   updateSectionStates();
@@ -2131,6 +2152,12 @@ function renderSymptomDetails(){
 function wireLogForm(){
   const form = $("#logForm");
   form.addEventListener("click", e => {
+    if (e.target.closest("#toggleExtra")){
+      state.profile.showAllLogFields = !state.profile.showAllLogFields; saveState();
+      form.classList.toggle("show-extra", state.profile.showAllLogFields);
+      e.target.closest("#toggleExtra").textContent = state.profile.showAllLogFields ? "▲ Daha az alan göster" : "▼ Daha fazla alan (mukus, uyku, su, ölçüm, ilaç…)";
+      return;
+    }
     const chip = e.target.closest(".chip");
     if (chip && chip.dataset.field && !chip.dataset.symptom && !chip.dataset.tag){ handleChip(chip); return; }
     const sym = e.target.closest("[data-symptom]");
@@ -2466,8 +2493,10 @@ function barChartSVG(data){
 }
 
 /* ===== PROFILE ===== */
+let moreOpen = false;
 function renderProfile(){
   const p = state.profile;
+  const mEl = $("#profileBody .more-settings"); if (mEl) moreOpen = mEl.open;
   const initials = (p.displayName || "R").trim().charAt(0).toUpperCase();
   $("#profileBody").innerHTML = `
     <div class="profile-head">
@@ -2513,6 +2542,11 @@ function renderProfile(){
           <label class="palette-btn ${p.palette==="custom"?"on":""}" style="cursor:pointer"><span class="swatch" style="background:${p.palette==="custom" ? esc(p.accentColor) : "conic-gradient(#f87171,#fbbf24,#34d399,#60a5fa,#a78bfa,#f472b6,#f87171)"}"></span><span class="palette-lbl">Özel</span><input type="color" id="customColor" value="${esc(p.accentColor || "#D06B8D")}" aria-label="Özel renk seç"></label>
         </div>
       </div>
+    </div>
+
+    <details class="more-settings"${moreOpen ? " open" : ""}>
+    <summary><span>⚙️ Daha fazla ayar</span><span class="s">yazı boyutu, ana sayfa, takvim…</span></summary>
+    <div class="list">
       <div class="list-item" style="flex-direction:column;align-items:stretch;gap:10px">
         <div style="display:flex;align-items:center;gap:12px"><span class="ico em">🔤</span><span class="tx"><span class="t">Yazı boyutu</span></span></div>
         <div class="seg sm" data-pseg="fontScale">${[["sm","Küçük"],["md","Normal"],["lg","Büyük"],["xl","Çok büyük"]].map(([v,l]) => `<button type="button" data-v="${v}" class="${(p.fontScale||"md")===v?"on":""}">${l}</button>`).join("")}</div>
@@ -2600,6 +2634,8 @@ function renderProfile(){
         <span class="val">${p.height ? p.height + " cm" : "—"}</span>
       </button>
     </div>
+
+    </details>
 
     <div class="card-title" style="margin:20px 0 2px 4px">Veri</div>
     <div class="list">
@@ -2744,7 +2780,7 @@ function openAvatarSheet(){
 function openHomeLayoutSheet(){
   const render = () => {
     const order = widgetOrder(), hidden = state.profile.hiddenWidgets || [];
-    $("#sheetBody").innerHTML = `<p class="empty-note" style="margin-bottom:8px">Kartları aç/kapat, oklarla sırala.</p>
+    $("#sheetBody").innerHTML = `<p class="empty-note" style="margin-bottom:8px">Ana sayfada görmek istediğin kartları aç. Oklarla sırasını değiştirebilirsin.</p>
       <div>${order.map((id, i) => { const w = HOME_WIDGETS.find(x => x.id === id); return `<div class="wrow">
         <span class="em">${w.em}</span><span class="nm">${w.name}</span>
         <button class="mv" data-mv="${i}" data-d="-1" ${i===0?"disabled":""} aria-label="Yukarı">↑</button>
@@ -2760,7 +2796,7 @@ function openHomeLayoutSheet(){
       state.profile.hiddenWidgets = h.includes(id) ? h.filter(x => x !== id) : h.concat(id);
       saveState(); haptic(); render();
     }));
-    $("#resetLayout").addEventListener("click", () => { state.profile.homeWidgets = HOME_WIDGETS.map(w => w.id); state.profile.hiddenWidgets = []; saveState(); render(); });
+    $("#resetLayout").addEventListener("click", () => { const d0 = defaultState().profile; state.profile.homeWidgets = d0.homeWidgets.slice(); state.profile.hiddenWidgets = d0.hiddenWidgets.slice(); saveState(); render(); });
   };
   openSheet("Ana sayfa düzeni", ""); render();
 }
