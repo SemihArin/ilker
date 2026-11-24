@@ -1,0 +1,16 @@
+{
+  "name": "Döngü — Regl Takibi",
+  "short_name": "Döngü",
+  "description": "Sevimli, gizli ve çevrimdışı regl ve döngü takibi.",
+  "lang": "tr",
+  "start_url": "./dongu.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FBF7F6",
+  "theme_color": "#7A3152",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

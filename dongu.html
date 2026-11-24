@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Döngü">
 <title>Döngü — Regl Takibi</title>
+<link rel="icon" type="image/svg+xml" href="icon.svg">
 <style>
 :root{
   --bg:#FBF7F6; --surface:#FFFFFF; --surface-2:#F8F2F3;
@@ -97,7 +98,8 @@ main#screens::-webkit-scrollbar{display:none;}
 .topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;
   gap:12px;padding:calc(env(safe-area-inset-top) + 14px) 18px 12px;
   background:linear-gradient(to bottom,var(--bg) 72%,transparent);}
-.topbar h1{font-size:19px;font-weight:700;letter-spacing:-.35px;}
+.topbar h1{font-size:19px;font-weight:700;letter-spacing:-.35px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.topbar > div:first-child{min-width:0;}
 .topbar .sub{font-size:12px;color:var(--ink-3);font-weight:500;letter-spacing:.02em;margin-top:1px;}
 .avatar-btn{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
   background:linear-gradient(145deg,var(--pink-200),var(--pink-100));color:var(--plum);
@@ -475,7 +477,7 @@ svg.chart{width:100%;height:auto;display:block;overflow:visible;}
 .switch.on{background:var(--pink-500);}
 .switch.on::after{transform:translateX(18px);}
 
-.palette-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.palette-row{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
 .palette-btn{aspect-ratio:1/1;border-radius:14px;border:2px solid transparent;
   display:flex;align-items:center;justify-content:center;position:relative;
   transition:transform .15s var(--ease);}
@@ -559,6 +561,60 @@ html[data-theme="dark"] .ob-step .num{color:var(--ink);}
 html[data-theme="dark"] .toast{background:var(--pink-100);color:var(--ink);}
 .toast.show{opacity:1;transform:none;}
 
+/* ===== v2 ===== */
+html[data-palette="lavender"]{--pink-50:#F6F3FD;--pink-100:#ECE5FB;--pink-200:#D9CCF6;--pink-300:#BFA9EE;--pink-500:#8E6FD8;--plum:#4A3489;--hero-1:#6E58C2;--hero-2:#3A2A78;}
+html[data-theme="dark"][data-palette="lavender"]{--pink-50:#1D1928;--pink-100:#282237;--pink-200:#3A3150;--pink-300:#7A66B8;--pink-500:#B9A6F2;--plum:#D8CCFA;--hero-1:#3E3270;--hero-2:#1E1838;}
+html[data-palette="peach"]{--pink-50:#FFF5F0;--pink-100:#FFE7DC;--pink-200:#FDD0BC;--pink-300:#F7B193;--pink-500:#E9825B;--plum:#7A3A22;--hero-1:#D9744E;--hero-2:#8A3C22;}
+html[data-theme="dark"][data-palette="peach"]{--pink-50:#2A1C17;--pink-100:#36241D;--pink-200:#4C3329;--pink-300:#9C6248;--pink-500:#F4A383;--plum:#F9CDB8;--hero-1:#6A3424;--hero-2:#331810;}
+html[data-palette="ocean"]{--pink-50:#F0F7FB;--pink-100:#DDEEF7;--pink-200:#BBDDEE;--pink-300:#8CC4E0;--pink-500:#3E8DBA;--plum:#1E4A66;--hero-1:#2F78A3;--hero-2:#163C57;}
+html[data-theme="dark"][data-palette="ocean"]{--pink-50:#15202A;--pink-100:#1C2C38;--pink-200:#29404F;--pink-300:#4F86A8;--pink-500:#84C2E6;--plum:#BFE0F3;--hero-1:#1F4A66;--hero-2:#0F2433;}
+html[data-palette="mint"]{--pink-50:#EFFAF6;--pink-100:#D9F3EA;--pink-200:#B4E6D5;--pink-300:#84D2B7;--pink-500:#36A383;--plum:#18523F;--hero-1:#2E8C6F;--hero-2:#145240;}
+html[data-theme="dark"][data-palette="mint"]{--pink-50:#14241F;--pink-100:#1B302A;--pink-200:#28473D;--pink-300:#4E9C82;--pink-500:#7FD4B6;--plum:#BDEBDB;--hero-1:#1E5A48;--hero-2:#0E2C23;}
+html[data-palette="cherry"]{--pink-50:#FDF1F2;--pink-100:#FADDE0;--pink-200:#F5BAC1;--pink-300:#EC8E9A;--pink-500:#D8455A;--plum:#7A1A2A;--hero-1:#B8344A;--hero-2:#6A1424;}
+html[data-theme="dark"][data-palette="cherry"]{--pink-50:#28171A;--pink-100:#351E22;--pink-200:#4D2A30;--pink-300:#A04D5B;--pink-500:#F08A9A;--plum:#F7C2CA;--hero-1:#6A2230;--hero-2:#331015;}
+
+#screens,.topbar,.sheet-body{zoom:var(--zoom,1);}
+.hero-mascot{font-size:42px;line-height:1;margin-left:auto;align-self:flex-start;
+  filter:drop-shadow(0 6px 12px rgba(0,0,0,.25));animation:floaty 3.4s ease-in-out infinite;user-select:none;}
+.ob-icon{animation:floaty 3.4s ease-in-out infinite;}
+@keyframes floaty{0%,100%{transform:translateY(0) rotate(-5deg);}50%{transform:translateY(-7px) rotate(5deg);}}
+
+.tip-card{display:flex;gap:12px;align-items:center;background:linear-gradient(135deg,var(--pink-50),var(--surface) 70%);}
+.tip-ico{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;font-size:23px;background:var(--pink-100);flex:none;}
+.tip-k{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--pink-500);}
+.tip-t{font-size:13px;line-height:1.45;color:var(--ink);margin-top:3px;font-weight:550;}
+.tip-next{width:34px;height:34px;border-radius:50%;background:var(--surface-2);color:var(--ink-2);font-size:16px;font-weight:800;flex:none;transition:transform .3s var(--ease);}
+.tip-next:active{transform:rotate(180deg);}
+
+.wk{cursor:pointer;}
+.wk:active{transform:scale(.93);}
+.wk.today .d{color:var(--plum);}
+html[data-theme="dark"] .wk.today .d{color:var(--pink-500);}
+.wk.pred .n{border:1.5px dashed var(--pink-300);}
+
+.whide{display:none !important;}
+.burst{position:fixed;z-index:400;pointer-events:none;font-size:22px;will-change:transform,opacity;animation:burst 1s var(--ease) forwards;}
+@keyframes burst{0%{opacity:0;transform:translate(0,0) scale(.4);}15%{opacity:1;}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(1.1) rotate(var(--rot));}}
+html.no-anim *,html.no-anim *::before,html.no-anim *::after{animation:none !important;transition:none !important;}
+
+.seg.sm button{padding:8px 2px;font-size:12px;}
+.palette-btn{aspect-ratio:auto;flex-direction:column;gap:5px;padding:9px 2px 7px;background:var(--surface-2);}
+.palette-btn .swatch{width:32px;height:32px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.35);}
+.palette-lbl{font-size:10px;font-weight:650;color:var(--ink-2);white-space:nowrap;}
+.palette-btn input[type=color]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0;}
+.wrow{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);}
+.wrow:last-child{border-bottom:none;}
+.wrow .em{font-size:18px;width:26px;text-align:center;flex:none;}
+.wrow .nm{flex:1;min-width:0;font-size:13.5px;font-weight:600;}
+.wrow .mv{width:30px;height:30px;border-radius:9px;background:var(--surface-2);color:var(--ink-2);font-weight:800;flex:none;}
+.wrow .mv:disabled{opacity:.3;}
+.emoji-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;}
+.emoji-grid button{aspect-ratio:1/1;border-radius:14px;background:var(--surface-2);font-size:24px;border:2px solid transparent;transition:transform .15s var(--ease);}
+.emoji-grid button:active{transform:scale(.88);}
+.emoji-grid button.on{border-color:var(--pink-500);background:var(--pink-50);}
+.list-item .ico.em{font-size:17px;width:18px;text-align:center;}
+.list-item .tx .t,.list-item .tx .s,.qbtn .lbl,.qbtn .sub2{display:block;}
+
 /* Misc */
 .mt10{margin-top:10px;} .mt14{margin-top:14px;} .mt18{margin-top:18px;}
 .hidden{display:none !important;}
@@ -594,14 +650,26 @@ html[data-theme="dark"] .toast{background:var(--pink-100);color:var(--ink);}
             <div class="hero-daynum" id="heroDay">—</div>
             <div class="hero-daylbl" id="heroDayLbl">döngü günü</div>
           </div>
+          <div class="hero-mascot" id="heroMascot" aria-hidden="true">🌷</div>
         </div>
         <p class="hero-desc" id="heroDesc">Döngünü takip etmeye başlamak için ilk regl kaydını ekle.</p>
       </div>
 
-      <div class="pad mt14">
+      <div class="pad mt14" id="homeWidgets">
         <div id="periodEndWrap"></div>
 
-        <div class="card mt14">
+        <div class="card mt14" data-w="week">
+          <div class="card-title">Bu Hafta <span class="link" id="weekLink">bugünü kaydet</span></div>
+          <div class="week-strip" id="weekStrip"></div>
+        </div>
+
+        <div class="card mt14 tip-card" data-w="tip">
+          <div class="tip-ico" id="tipIco">💡</div>
+          <div style="flex:1;min-width:0"><div class="tip-k">Günün ipucu</div><div class="tip-t" id="tipText">—</div></div>
+          <button class="tip-next" id="tipNext" aria-label="Başka ipucu">↻</button>
+        </div>
+
+        <div class="card mt14" data-w="countdown">
           <div class="card-title">Sonraki Regl <span class="link">tahmini</span></div>
           <div class="countdown">
             <div style="flex:none">
@@ -615,7 +683,7 @@ html[data-theme="dark"] .toast{background:var(--pink-100);color:var(--ink);}
           </div>
         </div>
 
-        <div class="card mt14">
+        <div class="card mt14" data-w="ovu">
           <div class="card-title">Ovulasyon & Doğurganlık <span class="link">tahmini</span></div>
           <div class="ovu-grid">
             <div class="ovu-item">
@@ -631,7 +699,7 @@ html[data-theme="dark"] .toast{background:var(--pink-100);color:var(--ink);}
           </div>
         </div>
 
-        <div class="quick-row mt14">
+        <div class="quick-row mt14" data-w="actions">
           <button class="qbtn primary" id="btnStartPeriod">
             <span class="ico">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -647,35 +715,35 @@ html[data-theme="dark"] .toast{background:var(--pink-100);color:var(--ink);}
         </div>
 
         <!-- Hızlı mood -->
-        <div class="card mt14">
+        <div class="card mt14" data-w="moods">
           <div class="card-title">Bugün Nasılsın?</div>
           <div class="mood-quick" id="quickMoods"></div>
         </div>
 
         <!-- Hızlı belirti -->
-        <div class="card mt14">
+        <div class="card mt14" data-w="symptoms">
           <div class="card-title">Hızlı Belirti <span class="link" id="allSymptomsLink">tümü</span></div>
           <div class="quick-sym" id="quickSymptoms"></div>
         </div>
 
         <!-- Mini takvim -->
-        <div class="card mt14">
+        <div class="card mt14" data-w="minical">
           <div class="card-title">Bu Ay <span class="link" id="openCalendarLink">takvim</span></div>
           <div class="mini-cal" id="miniCal"></div>
         </div>
 
-        <div class="card mt14">
+        <div class="card mt14" data-w="summary">
           <div class="card-title">Bugünün Özeti <span class="link" id="editToday">düzenle</span></div>
           <div id="todaySummary"><p class="empty-note">Bugün için henüz kayıt yok.</p></div>
         </div>
 
         <!-- Tahmin vs gerçek -->
-        <div class="card mt14 hidden" id="predVsActualCard">
+        <div class="card mt14 hidden" id="predVsActualCard" data-w="accuracy">
           <div class="card-title">Tahmin Doğruluğu</div>
           <div id="predVsActualBody"></div>
         </div>
 
-        <div class="info-card mt14">
+        <div class="info-card mt14" id="homeDisclaimer">
           <span class="ic">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
           </span>
@@ -690,6 +758,7 @@ html[data-theme="dark"] .toast{background:var(--pink-100);color:var(--ink);}
         <div class="cal-head">
           <div class="cal-month" id="calMonth">—</div>
           <div class="cal-nav">
+            <button id="calToday" style="width:auto;padding:0 12px;font-size:12px;font-weight:700">Bugün</button>
             <button id="calPrev" aria-label="Önceki ay">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
             </button>
@@ -843,7 +912,17 @@ function defaultState(){
       firstDayOfWeek: 1,
       hideIntimacy: false,
       birthDate: "",
-      height: ""
+      height: "",
+      avatarEmoji: "",
+      accentColor: "#D06B8D",
+      fontScale: "md",
+      animations: true,
+      haptics: true,
+      homeWidgets: ["week","countdown","ovu","actions","moods","symptoms","tip","minical","summary","accuracy"],
+      hiddenWidgets: [],
+      quickMoods: ["Mutlu","Üzgün","Sinirli","Stresli","Yorgun","Enerjik","Hassas"],
+      quickSymptoms: ["Karın ağrısı","Baş ağrısı","Şişkinlik","Yorgunluk","Bel ağrısı","Göğüs hassasiyeti"],
+      customSymptoms: []
     },
     periodEvents: [],
     dailyLogs: [],
@@ -1137,6 +1216,80 @@ const SEVERITY = ["hafif","orta","şiddetli"];
 const ACTIVITY_TYPES = ["Yürüyüş","Koşu","Yoga","Pilates","Kuvvet","Diğer"];
 const TEMP_METHODS = ["Bazal","Ağız","Koltuk altı","Diğer"];
 
+const HOME_WIDGETS = [
+  { id:"week",      em:"🗓️", name:"Bu hafta şeridi" },
+  { id:"countdown", em:"⏳", name:"Sonraki regl" },
+  { id:"ovu",       em:"🌼", name:"Ovulasyon & doğurganlık" },
+  { id:"actions",   em:"⚡", name:"Hızlı işlemler" },
+  { id:"moods",     em:"😊", name:"Bugün nasılsın?" },
+  { id:"symptoms",  em:"🩹", name:"Hızlı belirti" },
+  { id:"tip",       em:"💡", name:"Günün ipucu" },
+  { id:"minical",   em:"📅", name:"Bu ay" },
+  { id:"summary",   em:"📝", name:"Bugünün özeti" },
+  { id:"accuracy",  em:"🎯", name:"Tahmin doğruluğu" }
+];
+const PALETTES = [
+  { id:"rose",     name:"Gül",      a:"#D06B8D", b:"#6B2A47" },
+  { id:"cherry",   name:"Kiraz",    a:"#D8455A", b:"#6A1424" },
+  { id:"peach",    name:"Şeftali",  a:"#E9825B", b:"#8A3C22" },
+  { id:"amber",    name:"Amber",    a:"#B0812F", b:"#6B4E1A" },
+  { id:"mint",     name:"Nane",     a:"#36A383", b:"#145240" },
+  { id:"sage",     name:"Adaçayı",  a:"#5C8D74", b:"#2F5142" },
+  { id:"ocean",    name:"Okyanus",  a:"#3E8DBA", b:"#163C57" },
+  { id:"lavender", name:"Lavanta",  a:"#8E6FD8", b:"#3A2A78" },
+  { id:"berry",    name:"Böğürtlen",a:"#7B5AA6", b:"#422761" }
+];
+const AVATARS = ["🌸","🌷","🌺","🌻","🌼","🍓","🍒","🍑","🦋","🐱","🐰","🦊","🐼","🐻","🐥","🐨","🌙","⭐","✨","💖","🌈","🍀","🧸","🎀"];
+const PHASE_EMOJI = { period:"🌺", ovu:"✨", fertile:"🌼", follicular:"🌱", luteal:"🍂", none:"🌷" };
+const TIPS = {
+  period: ["Sıcak su torbası karın kramplarına iyi gelebilir 🫖","Bugün kendine nazik ol; dinlenmek de üretkenliktir 💗","Demirden zengin besinler (ıspanak, mercimek) enerjine destek olabilir 🥬","Bol su içmek şişkinliği azaltmaya yardımcı olabilir 💧","Hafif esneme ve yürüyüş krampları yumuşatabilir 🚶‍♀️"],
+  follicular: ["Enerjin yükselişte — yeni bir şeye başlamak için güzel bir zaman 🌱","Kardiyo ya da dans bugün çok iyi gidebilir 💃","Sosyal planlar için harika bir dönem ☀️","Yeni tarifler denemeye ne dersin? 🥗"],
+  fertile: ["Mukus gözlemlerini kaydetmek tahminleri daha anlamlı kılar 🔍","Bu pencere yalnızca bir tahmindir; korunma yöntemi değildir 🛡️","Enerjin ve özgüvenin tavan yapabilir ✨"],
+  ovu: ["Bazal sıcaklık ölçümleri yumurtlamayı geriye dönük doğrulamaya yardımcı olur 🌡️","Bugün kendini parlak hissediyor olabilirsin ✨"],
+  luteal: ["Tatlı isteği artabilir; bitter çikolata iyi bir orta yol 🍫","Magnezyumlu besinler (badem, muz) PMS'e iyi gelebilir 🍌","Uyku düzenine biraz daha özen göster 😴","Yoga ve nefes egzersizleri gerginliği azaltabilir 🧘‍♀️","Kafeini biraz azaltmak göğüs hassasiyetine iyi gelebilir ☕"],
+  none: ["İlk regl kaydını ekleyince sana özel tahminler başlar 🌷","Her gün küçük bir kayıt bile örüntülerini ortaya çıkarır 📈","Su içmeyi unutma 💧"]
+};
+function allSymptoms(){
+  const base = SYMPTOMS.filter(s => s !== "Diğer");
+  const extra = (state.profile.customSymptoms || []).filter(s => !base.includes(s));
+  return base.concat(extra, ["Diğer"]);
+}
+function widgetOrder(){
+  const ids = HOME_WIDGETS.map(w => w.id);
+  const saved = (state.profile.homeWidgets || []).filter(i => ids.includes(i));
+  return saved.concat(ids.filter(i => !saved.includes(i)));
+}
+function avatarGlyph(){
+  const p = state.profile;
+  return p.avatarEmoji || (p.displayName ? p.displayName.trim().charAt(0).toLocaleUpperCase("tr") : "🌸");
+}
+function greeting(){
+  const h = new Date().getHours();
+  return h < 6 ? "İyi geceler" : h < 12 ? "Günaydın" : h < 18 ? "İyi günler" : "İyi akşamlar";
+}
+function haptic(ms = 12){
+  if (state.profile.haptics !== false && navigator.vibrate){ try { navigator.vibrate(ms); } catch(e){} }
+}
+function burst(x, y, emojis){
+  haptic(18);
+  if (state.profile.animations === false) return;
+  if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (x == null){ x = innerWidth / 2; y = innerHeight / 2; }
+  const set = emojis || ["💖","🌸","✨","💗","🌷"];
+  for (let i = 0; i < 12; i++){
+    const s = document.createElement("span");
+    s.className = "burst"; s.textContent = set[i % set.length];
+    const a = Math.random() * Math.PI * 2, r = 55 + Math.random() * 85;
+    s.style.left = (x - 11) + "px"; s.style.top = (y - 11) + "px";
+    s.style.setProperty("--dx", (Math.cos(a) * r).toFixed(0) + "px");
+    s.style.setProperty("--dy", (Math.sin(a) * r - 40).toFixed(0) + "px");
+    s.style.setProperty("--rot", (Math.random() * 80 - 40).toFixed(0) + "deg");
+    s.style.animationDelay = (Math.random() * 90).toFixed(0) + "ms";
+    document.body.appendChild(s);
+    setTimeout(() => s.remove(), 1300);
+  }
+}
+
 /* ===== TOAST/SHEET ===== */
 function toast(msg){
   const t = document.createElement("div");
@@ -1152,8 +1305,10 @@ function openSheet(title, html){
   $("#sheet").classList.add("on");
 }
 function closeSheet(){
+  const wasOpen = $("#sheet").classList.contains("on");
   $("#overlay").classList.remove("on");
   $("#sheet").classList.remove("on");
+  if (wasOpen && currentScreen === "profile") renderProfile();
 }
 $("#overlay").addEventListener("click", closeSheet);
 $("#sheetClose").addEventListener("click", closeSheet);
@@ -1216,6 +1371,10 @@ const OB_STEPS = [
     title: "İlk bilgiler",
     desc: "Doğru tahminler için son regl başlangıç tarihin ve döngü uzunluğun önemli. Boş bırakırsan başlangıç tahmini kullanılır.",
     body: `<div class="field">
+      <label class="field-lbl">Sana nasıl hitap edelim? (isteğe bağlı)</label>
+      <input type="text" class="inp" id="obName" maxlength="24" placeholder="Ad veya takma ad">
+    </div>
+    <div class="field">
       <label class="field-lbl">Son regl başlangıç tarihi</label>
       <input type="date" class="inp" id="obLastPeriod" max="${todayISO()}" value="${todayISO()}">
     </div>
@@ -1234,7 +1393,9 @@ const OB_STEPS = [
     desc: "Uygulamaya başlayabilirsin. İlk kaydını ana sayfadaki “Reglim başladı” butonundan veya takvimden ekleyebilirsin.",
     body: `<div class="info-card"><span class="ic">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
-      </span><p>Hadi başlayalım.</p></div>`
+      </span><p>Hadi başlayalım! Bunları daha sonra Profil'den istediğin gibi değiştirebilirsin.</p></div>
+    <div class="field-lbl" style="margin-top:18px">En sevdiğin rengi seç</div>
+    <div class="palette-row">${PALETTES.map(pl => `<button class="palette-btn${pl.id==="rose"?" on":""}" data-obpal="${pl.id}"><span class="swatch" style="background:linear-gradient(135deg,${pl.a},${pl.b})"></span><span class="palette-lbl">${pl.name}</span></button>`).join("")}</div>`
   }
 ];
 
@@ -1260,6 +1421,10 @@ function renderObStep(){
       </div>`;
   if (isLast){
     $("#obFinish").addEventListener("click", finishOnboarding);
+    $$("#obHero [data-obpal]").forEach(b => b.addEventListener("click", () => {
+      state.profile.palette = b.dataset.obpal; applyTheme(); haptic();
+      $$("#obHero [data-obpal]").forEach(x => x.classList.toggle("on", x === b));
+    }));
   } else {
     $("#obNext").addEventListener("click", () => {
       if (obStep === 2) applyObData();
@@ -1274,6 +1439,8 @@ function applyObData(){
   const bl = parseInt($("#obBleedLen")?.value, 10);
   if (cl >= 15 && cl <= 60) state.profile.cyclePreference = cl;
   if (bl >= 1 && bl <= 15) state.profile.bleedingDurationPreference = bl;
+  const nm = ($("#obName")?.value || "").trim();
+  if (nm){ state.profile.displayName = nm; updateAvatar(); }
   if (last && last <= todayISO() && !state.periodEvents.some(e => e.startDate === last)){
     state.periodEvents.push(newPeriodEvent(last, "period"));
   }
@@ -1284,6 +1451,7 @@ function finishOnboarding(){
   saveState();
   $("#onboarding").classList.add("hidden");
   navigate("home");
+  burst(null, null, ["🌸","💖","✨","🌷"]);
 }
 
 /* ===== HOME ===== */
@@ -1312,6 +1480,14 @@ function renderHome(){
   }
   $("#heroDesc").textContent = desc;
 
+  const pk = phase ? phase.key : "none";
+  $("#heroMascot").textContent = PHASE_EMOJI[pk] || PHASE_EMOJI.none;
+  const nm = state.profile.displayName;
+  $("#topTitle").textContent = `${greeting()}${nm ? ", " + nm : ""} ${state.profile.avatarEmoji || "🌸"}`;
+  renderWeekStrip(today, p);
+  renderTip(pk);
+  applyHomeLayout();
+
   // Regl bitti butonu
   const peW = $("#periodEndWrap");
   const active = state.periodEvents.find(e => !e.endDate && today >= e.startDate);
@@ -1322,7 +1498,7 @@ function renderHome(){
     </button>`;
     $("#btnEndPeriod").addEventListener("click", () => {
       const ev = state.periodEvents.find(e => !e.endDate && today >= e.startDate);
-      if (ev){ ev.endDate = today; ev.updatedAt = new Date().toISOString(); saveState(); toast("Regl bitişi kaydedildi"); renderHome(); }
+      if (ev){ ev.endDate = today; ev.updatedAt = new Date().toISOString(); saveState(); toast("Regl bitişi kaydedildi 🌈"); burst(null, null, ["🌈","✨","💖","🎉"]); renderHome(); }
     });
   } else peW.innerHTML = "";
 
@@ -1354,7 +1530,9 @@ function renderHome(){
 
   // Hızlı mood
   const tlog = getLog(today);
-  $("#quickMoods").innerHTML = QUICK_MOODS.map(m => {
+  const qm = (state.profile.quickMoods && state.profile.quickMoods.length) ? state.profile.quickMoods : QUICK_MOODS;
+  $("#quickMoods").style.gridTemplateColumns = `repeat(${clamp(qm.length, 4, 7)},1fr)`;
+  $("#quickMoods").innerHTML = qm.map(m => {
     const on = tlog && tlog.moods && tlog.moods.includes(m);
     return `<button data-quick-mood="${esc(m)}" class="${on?"on":""}"><span class="em">${MOOD_EMOJI[m] || "•"}</span><span class="lb">${esc(m)}</span></button>`;
   }).join("");
@@ -1371,11 +1549,15 @@ function renderHome(){
       upsertLog(log); saveState();
       b.classList.toggle("on");
       toast(removed ? `${m} kaldırıldı` : `${m} kaydedildi`);
+      if (removed) haptic();
+      else { const r = b.getBoundingClientRect(); burst(r.left + r.width/2, r.top + r.height/2, [MOOD_EMOJI[m] || "💖", "💖", "✨"]); }
+      renderTodaySummary(today);
     });
   });
 
   // Hızlı belirti
-  $("#quickSymptoms").innerHTML = TOP_SYMPTOMS.map(s => {
+  const qs = (state.profile.quickSymptoms && state.profile.quickSymptoms.length) ? state.profile.quickSymptoms : TOP_SYMPTOMS;
+  $("#quickSymptoms").innerHTML = qs.map(s => {
     const on = tlog && (tlog.symptoms || []).some(x => (typeof x==="string"?x:x.name) === s);
     return `<button data-quick-sym="${esc(s)}" class="${on?"on":""}">${esc(s)}</button>`;
   }).join("");
@@ -1391,6 +1573,7 @@ function renderHome(){
       if (!log.createdAt) log.createdAt = log.updatedAt;
       upsertLog(log); saveState();
       b.classList.toggle("on");
+      haptic(); renderTodaySummary(today);
     });
   });
   $("#allSymptomsLink").onclick = () => navigate("log", { date: today });
@@ -1408,6 +1591,49 @@ function renderHome(){
   $("#btnTodayLog").onclick = () => navigate("log", { date: today });
   $("#btnStartPeriod").onclick = showStartPeriodSheet;
   $("#openCalendarLink").onclick = () => navigate("calendar");
+}
+
+function renderWeekStrip(today, p){
+  const off = state.profile.firstDayOfWeek === 1 ? dowIndex(today) : fromISO(today).getDay();
+  const start = addDays(today, -off);
+  const dow = state.profile.firstDayOfWeek === 1 ? DOW_MON : DOW_SUN;
+  let h = "";
+  for (let i = 0; i < 7; i++){
+    const iso = addDays(start, i), info = periodDayInfo(iso);
+    const cls = ["wk"];
+    if (iso === today) cls.push("today");
+    else if (info && info.type === "period") cls.push("period");
+    else if (!info && p && state.settings.showPredictions && iso >= p.rangeStart && iso <= p.rangeEnd) cls.push("pred");
+    else if (!info && p && state.settings.showFertile && iso >= p.fertileStart && iso <= p.fertileEnd) cls.push("fertile");
+    if (getLog(iso)) cls.push("haslog");
+    h += `<button class="${cls.join(" ")}" data-wk="${iso}"><span class="d">${dow[i]}</span><span class="n">${fromISO(iso).getDate()}</span><span class="mark"></span></button>`;
+  }
+  $("#weekStrip").innerHTML = h;
+  $$("#weekStrip [data-wk]").forEach(b => b.onclick = () => {
+    const d = b.dataset.wk;
+    if (d > todayISO()) return toast("Gelecek günler için kayıt eklenemez");
+    navigate("log", { date: d });
+  });
+  $("#weekLink").onclick = () => navigate("log", { date: today });
+}
+
+let tipShift = 0;
+function renderTip(pk){
+  const list = TIPS[pk] || TIPS.none;
+  const i = (diffDays("2024-01-01", todayISO()) + tipShift) % list.length;
+  $("#tipText").textContent = list[i];
+  $("#tipIco").textContent = PHASE_EMOJI[pk] || "💡";
+  $("#tipNext").onclick = () => { tipShift++; haptic(); renderTip(pk); };
+}
+
+function applyHomeLayout(){
+  const c = $("#homeWidgets"), anchor = $("#homeDisclaimer");
+  const hidden = state.profile.hiddenWidgets || [];
+  widgetOrder().forEach(id => {
+    const el = c.querySelector(`[data-w="${id}"]`); if (!el) return;
+    c.insertBefore(el, anchor);
+    el.classList.toggle("whide", hidden.includes(id));
+  });
 }
 
 function renderMiniCal(today){
@@ -1498,7 +1724,8 @@ function showStartPeriodSheet(){
     const openEvent = state.periodEvents.find(e => !e.endDate && e.startDate < date);
     if (openEvent){ openEvent.endDate = addDays(date, -1); openEvent.updatedAt = new Date().toISOString(); }
     state.periodEvents.push(newPeriodEvent(date, chosenType));
-    saveState(); closeSheet(); toast("Döngü başlatıldı");
+    saveState(); closeSheet(); toast("Döngü başlatıldı 🌺");
+    burst(null, null, ["🌺","💗","🌸","✨"]);
     if (currentScreen === "home") renderHome();
     if (currentScreen === "calendar") renderCalendar();
   });
@@ -1608,6 +1835,17 @@ $("#calDayPanel").addEventListener("click", e => {
 
 $("#calPrev").onclick = () => { calCursor.m--; if (calCursor.m<0){calCursor.m=11;calCursor.y--;} renderCalendar(); };
 $("#calNext").onclick = () => { calCursor.m++; if (calCursor.m>11){calCursor.m=0;calCursor.y++;} renderCalendar(); };
+$("#calToday").onclick = () => { const d = new Date(); calCursor = { y: d.getFullYear(), m: d.getMonth() }; selectedDay = todayISO(); renderCalendar(); };
+(() => {
+  let x0 = null, y0 = null;
+  const g = $("#calGrid");
+  g.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+  g.addEventListener("touchend", e => {
+    if (x0 == null) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; x0 = null;
+    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5){ haptic(); (dx < 0 ? $("#calNext") : $("#calPrev")).click(); }
+  });
+})();
 $("#togglePredBtn").onclick = () => { state.settings.showPredictions = !state.settings.showPredictions; saveState(); renderCalendar(); };
 $("#toggleFertBtn").onclick = () => { state.settings.showFertile = !state.settings.showFertile; saveState(); renderCalendar(); };
 
@@ -1677,7 +1915,7 @@ function buildLogForm(){
       <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
     <div class="sec-body">
       <div class="field"><label class="field-lbl">Bugün hissettiklerin</label>
-        <div class="chip-grid" id="symptomChips">${SYMPTOMS.map(s => {
+        <div class="chip-grid" id="symptomChips">${allSymptoms().map(s => {
           const on = draft.symptoms.some(x => x.name === s);
           return `<button type="button" class="chip${on?" on":""}" data-symptom="${esc(s)}">${esc(s)}</button>`;
         }).join("")}</div></div>
@@ -2040,7 +2278,7 @@ $("#btnSaveLog").addEventListener("click", () => {
   draft.updatedAt = new Date().toISOString();
   if (!draft.createdAt) draft.createdAt = draft.updatedAt;
   upsertLog(JSON.parse(JSON.stringify(draft)));
-  saveState(); toast("Kayıt kaydedildi"); navigate("home");
+  saveState(); toast("Kayıt kaydedildi 💖"); navigate("home"); burst();
 });
 
 /* ===== STATS ===== */
@@ -2233,7 +2471,7 @@ function renderProfile(){
   const initials = (p.displayName || "R").trim().charAt(0).toUpperCase();
   $("#profileBody").innerHTML = `
     <div class="profile-head">
-      <div class="av">${esc(initials)}</div>
+      <button class="av" data-act="avatar" aria-label="Profil simgesini değiştir">${esc(avatarGlyph())}</button>
       <div style="flex:1;min-width:0">
         <div class="nm">${esc(p.displayName || "İsimsiz Kullanıcı")}</div>
         <div class="sb">${state.periodEvents.length} regl · ${state.dailyLogs.length} günlük</div>
@@ -2264,24 +2502,64 @@ function renderProfile(){
 
     <div class="card-title" style="margin:20px 0 2px 4px">Görünüm</div>
     <div class="list">
-      <div class="list-item">
-        <span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span>
-        <span class="tx"><span class="t">Koyu tema</span></span>
-        <button class="switch ${p.theme==="dark"?"on":""}" data-act="theme"></button>
-      </div>
-      <div class="list-item">
-        <span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="4"/></svg></span>
-        <span class="tx"><span class="t">Renk paleti</span></span>
-        <span class="val">${({rose:"Gül",sage:"Adaçayı",amber:"Amber",berry:"Böğürtlen"})[p.palette]||"Gül"}</span>
+      <div class="list-item" style="flex-direction:column;align-items:stretch;gap:10px">
+        <div style="display:flex;align-items:center;gap:12px"><span class="ico em">🌗</span><span class="tx"><span class="t">Tema</span></span></div>
+        <div class="seg sm" data-pseg="theme">${[["light","☀️ Açık"],["dark","🌙 Koyu"],["auto","🌓 Otomatik"]].map(([v,l]) => `<button type="button" data-v="${v}" class="${(p.theme||"light")===v?"on":""}">${l}</button>`).join("")}</div>
       </div>
       <div class="list-item" style="flex-direction:column;align-items:stretch;gap:10px">
+        <div style="display:flex;align-items:center;gap:12px"><span class="ico em">🎨</span><span class="tx"><span class="t">Renk paleti</span><span class="s">${p.palette==="custom" ? "Özel renk" : esc((PALETTES.find(x => x.id === p.palette) || PALETTES[0]).name)}</span></span></div>
         <div class="palette-row">
-          <button class="palette-btn ${p.palette==="rose"?"on":""}" data-pal="rose" data-act="palette"><span class="swatch">G</span></button>
-          <button class="palette-btn ${p.palette==="sage"?"on":""}" data-pal="sage" data-act="palette"><span class="swatch">A</span></button>
-          <button class="palette-btn ${p.palette==="amber"?"on":""}" data-pal="amber" data-act="palette"><span class="swatch">Am</span></button>
-          <button class="palette-btn ${p.palette==="berry"?"on":""}" data-pal="berry" data-act="palette"><span class="swatch">B</span></button>
+          ${PALETTES.map(pl => `<button class="palette-btn ${p.palette===pl.id?"on":""}" data-pal="${pl.id}" data-act="palette"><span class="swatch" style="background:linear-gradient(135deg,${pl.a},${pl.b})"></span><span class="palette-lbl">${pl.name}</span></button>`).join("")}
+          <label class="palette-btn ${p.palette==="custom"?"on":""}" style="cursor:pointer"><span class="swatch" style="background:${p.palette==="custom" ? esc(p.accentColor) : "conic-gradient(#f87171,#fbbf24,#34d399,#60a5fa,#a78bfa,#f472b6,#f87171)"}"></span><span class="palette-lbl">Özel</span><input type="color" id="customColor" value="${esc(p.accentColor || "#D06B8D")}" aria-label="Özel renk seç"></label>
         </div>
       </div>
+      <div class="list-item" style="flex-direction:column;align-items:stretch;gap:10px">
+        <div style="display:flex;align-items:center;gap:12px"><span class="ico em">🔤</span><span class="tx"><span class="t">Yazı boyutu</span></span></div>
+        <div class="seg sm" data-pseg="fontScale">${[["sm","Küçük"],["md","Normal"],["lg","Büyük"],["xl","Çok büyük"]].map(([v,l]) => `<button type="button" data-v="${v}" class="${(p.fontScale||"md")===v?"on":""}">${l}</button>`).join("")}</div>
+      </div>
+      <div class="list-item">
+        <span class="ico em">✨</span>
+        <span class="tx"><span class="t">Animasyonlar</span><span class="s">Kutlama efektleri ve geçişler</span></span>
+        <button class="switch ${p.animations!==false?"on":""}" data-act="animations"></button>
+      </div>
+      <div class="list-item">
+        <span class="ico em">📳</span>
+        <span class="tx"><span class="t">Titreşim</span><span class="s">Dokunuşlarda hafif geri bildirim</span></span>
+        <button class="switch ${p.haptics!==false?"on":""}" data-act="haptics"></button>
+      </div>
+    </div>
+
+    <div class="card-title" style="margin:20px 0 2px 4px">Kişiselleştir</div>
+    <div class="list">
+      <button class="list-item" data-act="avatar">
+        <span class="ico em">${esc(avatarGlyph())}</span>
+        <span class="tx"><span class="t">Profil simgesi</span><span class="s">Sevimli bir simge seç</span></span>
+        <span class="val">›</span>
+      </button>
+      <button class="list-item" data-act="homeLayout">
+        <span class="ico em">🏠</span>
+        <span class="tx"><span class="t">Ana sayfa düzeni</span><span class="s">Kartları sırala, gizle veya göster</span></span>
+        <span class="val">${HOME_WIDGETS.length - (p.hiddenWidgets||[]).length}/${HOME_WIDGETS.length}</span>
+      </button>
+      <button class="list-item" data-act="quickMoods">
+        <span class="ico em">😊</span>
+        <span class="tx"><span class="t">Hızlı ruh halleri</span><span class="s">Ana sayfadaki ruh hali butonları</span></span>
+        <span class="val">${(p.quickMoods||[]).length} seçili</span>
+      </button>
+      <button class="list-item" data-act="quickSyms">
+        <span class="ico em">🩹</span>
+        <span class="tx"><span class="t">Hızlı belirtiler</span><span class="s">Ana sayfadaki belirti butonları</span></span>
+        <span class="val">${(p.quickSymptoms||[]).length} seçili</span>
+      </button>
+      <button class="list-item" data-act="customSyms">
+        <span class="ico em">➕</span>
+        <span class="tx"><span class="t">Kendi belirtilerin</span><span class="s">Listede olmayanları ekle</span></span>
+        <span class="val">${(p.customSymptoms||[]).length}</span>
+      </button>
+    </div>
+
+    <div class="card-title" style="margin:20px 0 2px 4px">Takvim</div>
+    <div class="list">
       <div class="list-item">
         <span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></span>
         <span class="tx"><span class="t">Hafta başlangıcı</span></span>
@@ -2353,7 +2631,7 @@ function renderProfile(){
 
     <div class="info-card mt14" style="background:var(--surface-2);border-color:var(--line)"><span class="ic" style="color:var(--ink-3)">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M3 12h18"/></svg>
-    </span><p style="color:var(--ink-3)">Döngü v1.2 · Tek dosya, çevrimdışı. Tıbbi tanı veya doğum kontrol yöntemi değildir.</p></div>
+    </span><p style="color:var(--ink-3)">Döngü v2.0 · Çevrimdışı da çalışır. Tıbbi tanı veya doğum kontrol yöntemi değildir.</p></div>
   `;
   wireProfile();
 }
@@ -2370,6 +2648,13 @@ function wireProfile(){
         if (p){ state.profile.palette = p; applyTheme(); saveState(); renderProfile(); toast("Palet değiştirildi"); }
         return;
       }
+      if (act === "animations"){ state.profile.animations = state.profile.animations === false; applyTheme(); saveState(); renderProfile(); return; }
+      if (act === "haptics"){ state.profile.haptics = state.profile.haptics === false; saveState(); haptic(20); renderProfile(); return; }
+      if (act === "avatar"){ openAvatarSheet(); return; }
+      if (act === "homeLayout"){ openHomeLayoutSheet(); return; }
+      if (act === "quickMoods"){ openPickSheet("Hızlı ruh halleri", MOODS, "quickMoods", 7); return; }
+      if (act === "quickSyms"){ openPickSheet("Hızlı belirtiler", allSymptoms(), "quickSymptoms", 8); return; }
+      if (act === "customSyms"){ openCustomSymSheet(); return; }
       if (act === "toggleDow"){ state.profile.firstDayOfWeek = state.profile.firstDayOfWeek === 1 ? 0 : 1; saveState(); renderProfile(); return; }
       if (act === "editName"){
         openSheet("İsim", `
@@ -2433,6 +2718,92 @@ function wireProfile(){
       }
     });
   });
+  $$("#profileBody [data-pseg] button").forEach(b => b.addEventListener("click", () => {
+    state.profile[b.parentElement.dataset.pseg] = b.dataset.v;
+    applyTheme(); saveState(); haptic(); renderProfile();
+  }));
+  const cc = $("#customColor");
+  if (cc){
+    cc.addEventListener("input", () => { state.profile.palette = "custom"; state.profile.accentColor = cc.value; applyTheme(); });
+    cc.addEventListener("change", () => { state.profile.palette = "custom"; state.profile.accentColor = cc.value; applyTheme(); saveState(); renderProfile(); toast("Özel renk uygulandı 🎨"); });
+  }
+}
+
+function openAvatarSheet(){
+  openSheet("Profil simgesi", `
+    <div class="emoji-grid">${AVATARS.map(e => `<button type="button" class="${state.profile.avatarEmoji===e?"on":""}" data-av="${e}">${e}</button>`).join("")}</div>
+    <button class="btn btn-ghost mt14" id="avInitial">Baş harfimi kullan</button>`);
+  $$("#sheetBody [data-av]").forEach(b => b.addEventListener("click", () => {
+    state.profile.avatarEmoji = b.dataset.av; saveState(); updateAvatar();
+    const r = b.getBoundingClientRect(); burst(r.left + r.width/2, r.top + r.height/2, [b.dataset.av, "✨", "💖"]);
+    closeSheet();
+  }));
+  $("#avInitial").addEventListener("click", () => { state.profile.avatarEmoji = ""; saveState(); updateAvatar(); closeSheet(); });
+}
+
+function openHomeLayoutSheet(){
+  const render = () => {
+    const order = widgetOrder(), hidden = state.profile.hiddenWidgets || [];
+    $("#sheetBody").innerHTML = `<p class="empty-note" style="margin-bottom:8px">Kartları aç/kapat, oklarla sırala.</p>
+      <div>${order.map((id, i) => { const w = HOME_WIDGETS.find(x => x.id === id); return `<div class="wrow">
+        <span class="em">${w.em}</span><span class="nm">${w.name}</span>
+        <button class="mv" data-mv="${i}" data-d="-1" ${i===0?"disabled":""} aria-label="Yukarı">↑</button>
+        <button class="mv" data-mv="${i}" data-d="1" ${i===order.length-1?"disabled":""} aria-label="Aşağı">↓</button>
+        <button class="switch ${hidden.includes(id)?"":"on"}" data-hw="${id}" aria-label="Göster/gizle"></button></div>`; }).join("")}</div>
+      <button class="btn btn-ghost mt14" id="resetLayout">Varsayılana dön</button>`;
+    $$("#sheetBody [data-mv]").forEach(b => b.addEventListener("click", () => {
+      const o = widgetOrder(), i = Number(b.dataset.mv), j = i + Number(b.dataset.d);
+      [o[i], o[j]] = [o[j], o[i]]; state.profile.homeWidgets = o; saveState(); haptic(); render();
+    }));
+    $$("#sheetBody [data-hw]").forEach(b => b.addEventListener("click", () => {
+      const id = b.dataset.hw, h = state.profile.hiddenWidgets || [];
+      state.profile.hiddenWidgets = h.includes(id) ? h.filter(x => x !== id) : h.concat(id);
+      saveState(); haptic(); render();
+    }));
+    $("#resetLayout").addEventListener("click", () => { state.profile.homeWidgets = HOME_WIDGETS.map(w => w.id); state.profile.hiddenWidgets = []; saveState(); render(); });
+  };
+  openSheet("Ana sayfa düzeni", ""); render();
+}
+
+function openPickSheet(title, options, key, max){
+  const render = () => {
+    const sel = state.profile[key] || [];
+    $("#sheetBody").innerHTML = `<p class="empty-note" style="margin-bottom:12px">Ana sayfada görünecekleri seç (en fazla ${max}). Seçim sırası, görünüm sırasıdır.</p>
+      <div class="chip-grid">${options.map(o => `<button type="button" class="chip${sel.includes(o)?" on":""}" data-pick="${esc(o)}">${MOOD_EMOJI[o] ? MOOD_EMOJI[o] + " " : ""}${esc(o)}${sel.includes(o) ? ` <b style="opacity:.7">${sel.indexOf(o)+1}</b>` : ""}</button>`).join("")}</div>
+      <button class="btn btn-primary mt18" id="pickDone">Tamam</button>`;
+    $$("#sheetBody [data-pick]").forEach(b => b.addEventListener("click", () => {
+      const v = b.dataset.pick; let cur = (state.profile[key] || []).slice();
+      if (cur.includes(v)){ if (cur.length <= 1) return toast("En az bir seçim kalmalı"); cur = cur.filter(x => x !== v); }
+      else { if (cur.length >= max) return toast(`En fazla ${max} seçebilirsin`); cur.push(v); }
+      state.profile[key] = cur; saveState(); haptic(); render();
+    }));
+    $("#pickDone").addEventListener("click", closeSheet);
+  };
+  openSheet(title, ""); render();
+}
+
+function openCustomSymSheet(){
+  const render = () => {
+    const list = state.profile.customSymptoms || [];
+    $("#sheetBody").innerHTML = `<p class="empty-note" style="margin-bottom:12px">Listede olmayan belirtileri ekle; kayıt ekranında ve hızlı belirtilerde kullanabilirsin. Silmek için üzerine dokun.</p>
+      <div style="display:flex;gap:8px"><input class="inp" id="newSym" placeholder="Örn. Çene ağrısı" maxlength="30"><button class="btn btn-primary btn-sm" id="addSym" style="width:auto;flex:none">Ekle</button></div>
+      <div class="chip-grid mt14">${list.length ? list.map(x => `<button type="button" class="chip on soft" data-rmsym="${esc(x)}">${esc(x)} ✕</button>`).join("") : '<p class="empty-note">Henüz özel belirti yok.</p>'}</div>`;
+    const add = () => {
+      const v = $("#newSym").value.trim(); if (!v) return;
+      if (allSymptoms().some(x => x.toLocaleLowerCase("tr") === v.toLocaleLowerCase("tr"))) return toast("Bu belirti zaten var");
+      state.profile.customSymptoms = list.concat(v); saveState(); haptic(); render(); toast("Eklendi ✨");
+      $("#newSym").focus();
+    };
+    $("#addSym").addEventListener("click", add);
+    $("#newSym").addEventListener("keydown", e => { if (e.key === "Enter") add(); });
+    $$("#sheetBody [data-rmsym]").forEach(b => b.addEventListener("click", () => {
+      const v = b.dataset.rmsym;
+      state.profile.customSymptoms = list.filter(x => x !== v);
+      state.profile.quickSymptoms = (state.profile.quickSymptoms || []).filter(x => x !== v);
+      saveState(); render();
+    }));
+  };
+  openSheet("Kendi belirtilerin", ""); render();
 }
 function openNumberSheet(title, unit, value, min, max, onOk, step = 1){
   openSheet(title, `
@@ -2531,51 +2902,50 @@ function importData(){
 }
 
 /* ===== THEME ===== */
+const mqDark = window.matchMedia ? matchMedia("(prefers-color-scheme: dark)") : null;
+const PAL_VARS = ["--pink-50","--pink-100","--pink-200","--pink-300","--pink-500","--plum","--hero-1","--hero-2"];
+function hexToHsl(hex){
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return [340, 55, 60];
+  const n = parseInt(m[1], 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b); let h = 0, s = 0; const l = (mx + mn) / 2;
+  if (mx !== mn){ const d = mx - mn; s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = (mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60; }
+  return [Math.round(h), Math.round(s * 100), Math.round(l * 100)];
+}
 function applyTheme(){
-  document.documentElement.setAttribute("data-theme", state.profile.theme === "dark" ? "dark" : "light");
-  document.documentElement.setAttribute("data-palette", state.profile.palette || "rose");
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta){
-    const bg = state.profile.theme === "dark" ? "#131013" : "#FBF7F6";
-    meta.setAttribute("content", bg);
+  const t = state.profile.theme;
+  const dark = t === "dark" || (t === "auto" && mqDark && mqDark.matches);
+  const root = document.documentElement;
+  root.setAttribute("data-theme", dark ? "dark" : "light");
+  root.setAttribute("data-palette", state.profile.palette || "rose");
+  PAL_VARS.forEach(v => root.style.removeProperty(v));
+  if (state.profile.palette === "custom"){
+    const [h, sat] = hexToHsl(state.profile.accentColor);
+    const S = clamp(sat, 25, 80);
+    const L = dark ? [11, 15, 22, 42, 72, 86, 25, 12] : [97, 93, 86, 76, 55, 26, 36, 18];
+    PAL_VARS.forEach((v, i) => root.style.setProperty(v, `hsl(${h} ${i < 4 ? Math.min(S, 70) : S}% ${L[i]}%)`));
   }
+  root.style.setProperty("--zoom", ({ sm: .92, md: 1, lg: 1.1, xl: 1.2 })[state.profile.fontScale] || 1);
+  root.classList.toggle("no-anim", state.profile.animations === false);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", dark ? "#131013" : "#FBF7F6");
+}
+if (mqDark){
+  const onScheme = () => { if (state.profile.theme === "auto") applyTheme(); };
+  mqDark.addEventListener ? mqDark.addEventListener("change", onScheme) : mqDark.addListener(onScheme);
 }
 function updateAvatar(){
-  const name = state.profile.displayName;
-  $("#avatarBtn").textContent = name ? name.trim().charAt(0).toUpperCase() : "R";
+  $("#avatarBtn").textContent = avatarGlyph();
 }
 
 /* ===== PWA ===== */
 function setupPWA(){
-  // Manifest via data URI
-  try {
-    const manifest = {
-      name: "Döngü — Regl Takibi",
-      short_name: "Döngü",
-      start_url: ".",
-      display: "standalone",
-      background_color: "#FBF7F6",
-      theme_color: "#7A3152",
-      lang: "tr",
-      icons: [{
-        src: "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="40" fill="#7A3152"/><text x="96" y="128" font-family="Arial" font-size="96" font-weight="bold" fill="#FFF3F7" text-anchor="middle">D</text></svg>'),
-        sizes: "192x192", type: "image/svg+xml", purpose: "any"
-      }]
-    };
-    const blob = new Blob([JSON.stringify(manifest)], { type:"application/manifest+json" });
-    const link = document.createElement("link");
-    link.rel = "manifest";
-    link.href = URL.createObjectURL(blob);
-    document.head.appendChild(link);
-  } catch(e){ /* manifest not critical */ }
-  // Service worker via blob (works on http(s), not file://)
-  if ("serviceWorker" in navigator && location.protocol !== "file:"){
-    const swCode = `self.addEventListener("install",e=>self.skipWaiting());self.addEventListener("activate",e=>self.clients.claim());self.addEventListener("fetch",e=>{if(e.request.method!=="GET")return;e.respondWith(caches.open("dongu-v1").then(c=>c.match(e.request).then(r=>r||fetch(e.request).then(res=>{if(res.ok&&e.request.url.startsWith(self.location.origin))c.put(e.request,res.clone());return res;}))).catch(()=>fetch(e.request)));});`;
-    try {
-      const swBlob = new Blob([swCode], { type:"application/javascript" });
-      navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(()=>{});
-    } catch(e){}
-  }
+  // manifest.json, sw.js ve icon.svg bu dosyanın yanında durmalı. file:// altında çalışmaz.
+  if (!/^https?:$/.test(location.protocol)) return;
+  const link = document.createElement("link");
+  link.rel = "manifest"; link.href = "manifest.json";
+  document.head.appendChild(link);
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
 /* ===== INIT ===== */
